@@ -32,6 +32,7 @@ import (
 	"dvln/lib/out"
 
 	"github.com/BurntSushi/toml"
+	"github.com/magiconair/properties"
 	"github.com/spf13/cast"
 	"gopkg.in/yaml.v2"
 )
@@ -153,6 +154,17 @@ func marshallConfigReader(in io.Reader, c map[string]interface{}, configType str
 	case "toml":
 		if _, err := toml.Decode(buf.String(), &c); err != nil {
 			out.Fatalf("Error parsing config: %s", err)
+		}
+
+	case "properties", "props", "prop":
+		var p *properties.Properties
+		var err error
+		if p, err = properties.Load(buf.Bytes(), properties.UTF8); err != nil {
+			jww.ERROR.Fatalf("Error parsing config: %s", err)
+		}
+		for _, key := range p.Keys() {
+			value, _ := p.Get(key)
+			c[key] = value
 		}
 	}
 
