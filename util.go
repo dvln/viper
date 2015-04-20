@@ -1,3 +1,11 @@
+// Modified copy of spf13's viper package.  Primary changes are to
+// use the 'dvln/out' package for output and some adjustments on those
+// output statements so they are more debugging/trace level statements
+// instead of standard info/print output (for dvln only errors with config
+// need to be seen, normal functionality should "just work" silently unless
+// one is asking for trace level detailed debugging).
+//
+// Copyright from spf13:
 // Copyright © 2014 Steve Francia <spf@spf13.com>.
 //
 // Use of this source code is governed by an MIT-style
@@ -21,12 +29,14 @@ import (
 	"strings"
 	"unicode"
 
+	"dvln/lib/out"
+
 	"github.com/BurntSushi/toml"
 	"github.com/spf13/cast"
-	jww "github.com/spf13/jwalterweatherman"
 	"gopkg.in/yaml.v2"
 )
 
+// insensitiviseMap turns the keys into lower case (case insensitive)
 func insensitiviseMap(m map[string]interface{}) {
 	for key, val := range m {
 		lower := strings.ToLower(key)
@@ -37,8 +47,10 @@ func insensitiviseMap(m map[string]interface{}) {
 	}
 }
 
+// absPathify takes a path and attempts to clean it up and turn
+// it into an absolute path via filepath.Clean and filepath.Abs
 func absPathify(inPath string) string {
-	jww.INFO.Println("Trying to resolve absolute path to", inPath)
+	out.Traceln("Trying to resolve absolute path to", inPath)
 
 	if strings.HasPrefix(inPath, "$HOME") {
 		inPath = userHomeDir() + inPath[5:]
@@ -56,14 +68,13 @@ func absPathify(inPath string) string {
 	p, err := filepath.Abs(inPath)
 	if err == nil {
 		return filepath.Clean(p)
-	} else {
-		jww.ERROR.Println("Couldn't discover absolute path")
-		jww.ERROR.Println(err)
 	}
+	out.Errorln("Couldn't discover absolute path")
+	out.Errorln(err)
 	return ""
 }
 
-// Check if File / Directory Exists
+// exists checks if given file/dir exists
 func exists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
@@ -75,6 +86,7 @@ func exists(path string) (bool, error) {
 	return false, err
 }
 
+// stringInSlice is checking exactly that, is the string in the slice
 func stringInSlice(a string, list []string) bool {
 	for _, b := range list {
 		if b == a {
@@ -84,6 +96,7 @@ func stringInSlice(a string, list []string) bool {
 	return false
 }
 
+// userHomeDir figures out the users home dir
 func userHomeDir() string {
 	if runtime.GOOS == "windows" {
 		home := os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
@@ -118,6 +131,10 @@ func findCWD() (string, error) {
 	return path, nil
 }
 
+// marshallConfigReader reads from the given io.Reader and unmarshals
+// the results into the given map 'c' (adding to it potentially) for
+// the given config type (yaml/yml, json, toml) with case insensitive
+// keys (lower case basically)
 func marshallConfigReader(in io.Reader, c map[string]interface{}, configType string) {
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(in)
@@ -125,20 +142,21 @@ func marshallConfigReader(in io.Reader, c map[string]interface{}, configType str
 	switch configType {
 	case "yaml", "yml":
 		if err := yaml.Unmarshal(buf.Bytes(), &c); err != nil {
-			jww.ERROR.Fatalf("Error parsing config: %s", err)
+			out.Fatalf("Error parsing config: %s", err)
 		}
 
 	case "json":
 		if err := json.Unmarshal(buf.Bytes(), &c); err != nil {
-			jww.ERROR.Fatalf("Error parsing config: %s", err)
+			out.Fatalf("Error parsing config: %s", err)
 		}
 
 	case "toml":
 		if _, err := toml.Decode(buf.String(), &c); err != nil {
-			jww.ERROR.Fatalf("Error parsing config: %s", err)
+			out.Fatalf("Error parsing config: %s", err)
 		}
 	}
 
+	// make all keys lower case (case insensitive)
 	insensitiviseMap(c)
 }
 

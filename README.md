@@ -1,9 +1,9 @@
-viper [![Build Status](https://travis-ci.org/spf13/viper.svg)](https://travis-ci.org/spf13/viper)
-=====
+viper (aka: cfg) [[master](https://github.com/spf13/viper)]
+================
 
 Go configuration with fangs
 
-## What is Viper?
+## What is Viper (aka: cfg)?
 
 Viper is a complete configuration solution for go applications. It has
 been designed to work within an application to handle all types of
@@ -19,13 +19,13 @@ configuration. It supports
 It can be thought of as a registry for all of your applications
 configuration needs.
 
-## Why Viper?
+## Why Use This?
 
 When building a modern application, you don’t want to have to worry about
 configuration file formats; you want to focus on building awesome software.
-Viper is here to help with that.
+This package is here to help with that.
 
-Viper does the following for you:
+It does the following for you:
 
 1. Find, load and marshal a configuration file in JSON, TOML or YAML.
 2. Provide a mechanism to set default values for your different
@@ -37,7 +37,7 @@ Viper does the following for you:
 5. Make it easy to tell the difference between when a user has provided
    a command line or config file which is the same as the default.
 
-Viper uses the following precedence order. Each item takes precedence
+This package uses the following precedence order. Each item takes precedence
 over the item below it:
 
  * explicit call to Set
@@ -47,9 +47,9 @@ over the item below it:
  * key/value store
  * default
 
-Viper configuration keys are case insensitive.
+Note that configuration "keys" are case insensitive.
 
-## Putting Values into Viper
+## Putting Values into the system (aka: viper)
 
 ### Establishing Defaults
 
@@ -66,10 +66,10 @@ Examples:
 
 ### Reading Config Files
 
-If you want to support a config file, Viper requires a minimal
-configuration so it knows where to look for the config file. Viper
-supports json, toml and yaml files. Viper can search multiple paths, but
-currently a single viper only supports a single config file.
+If you want to support a config file, viper (aka: cfg) requires a minimal
+configuration so it knows where to look for the config file. The package
+supports json, toml and yaml files and can search multiple paths.  However,
+currently a single viper instance only supports a single config file.
 
 	viper.SetConfigName("config") // name of config file (without extension)
 	viper.AddConfigPath("/etc/appname/")   // path to look for the config file in
@@ -189,7 +189,7 @@ in your K/V store. `crypt` defaults to etcd on http://127.0.0.1:4001.
 
 Confirm that your value was set:
 
-	crypt get -plaintext /config/hugo.json
+	crypt get -plaintext /config/dvln.json
 
 See the `crypt` documentation for examples of how to set encrypted values, or how
 to use Consul.

@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"dvln/lib/out"
+
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 )
@@ -303,8 +305,24 @@ func TestAliasesOfAliases(t *testing.T) {
 }
 
 func TestRecursiveAliases(t *testing.T) {
+	// Stash existing 'out' package screen threshold and screen writer and
+	// adjust it so we're only writing ERROR's and below and that we send
+	// those to a buffer and not the screen:
+	oldScreenThreshold := out.Threshold(out.ForScreen)
+	oldScreenWriter := out.Writer(out.LevelAll, out.ForScreen)
+	screenBuf := new(bytes.Buffer)
+	out.SetThreshold(out.LevelError, out.ForScreen)
+	out.SetWriter(out.LevelAll, screenBuf, out.ForScreen)
+
+	// Now set up a recursive alias, should produce an ERROR:
 	RegisterAlias("Baz", "Roo")
 	RegisterAlias("Roo", "baz")
+	assert.Contains(t, screenBuf.String(), "ERROR: cfg: Creating circular reference alias:")
+
+	// Reset the screen output threshold and screen writer for remaining
+	// tests in case they are needed
+	out.SetThreshold(oldScreenThreshold, out.ForScreen)
+	out.SetWriter(out.LevelAll, oldScreenWriter, out.ForScreen)
 }
 
 func TestMarshal(t *testing.T) {
@@ -348,7 +366,7 @@ func TestBindPFlags(t *testing.T) {
 		"endpoint": "/public",
 	}
 
-	for name, _ := range testValues {
+	for name := range testValues {
 		testValues[name] = flagSet.String(name, "", "test")
 	}
 
