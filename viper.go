@@ -755,6 +755,8 @@ func (v *Viper) ReadInConfig() error {
 		return err
 	}
 
+	v.config = make(map[string]interface{})
+
 	v.marshalReader(bytes.NewReader(file), v.config)
 	return nil
 }
