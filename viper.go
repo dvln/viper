@@ -122,6 +122,10 @@ func (rce RemoteConfigError) Error() string {
 //		"endpoint": "https://localhost"
 //	}
 type Viper struct {
+	// Delimiter that separates a list of keys
+	// used to access a nested value in one go
+	keyDelim string
+
 	// A set of paths to look for the config file in
 	configPaths []string
 
@@ -149,6 +153,7 @@ type Viper struct {
 // New returns an initialized Viper instance.
 func New() *Viper {
 	v := new(Viper)
+	v.keyDelim = "."
 	v.configName = "config"
 	v.config = make(map[string]interface{})
 	v.override = make(map[string]interface{})
@@ -334,6 +339,26 @@ func (v *Viper) providerPathExists(p *remoteProvider) bool {
 	return false
 }
 
+func (v *Viper) searchMap(source map[string]interface{}, path []string) interface{} {
+
+	if len(path) == 0 {
+		return source
+	}
+
+	if next, ok := source[path[0]]; ok {
+		switch next.(type) {
+		case map[string]interface{}:
+			// Type assertion is safe here since it is only reached
+			// if the type of `next` is the same as the type being asserted
+			return v.searchMap(next.(map[string]interface{}), path[1:])
+		default:
+			return next
+		}
+	} else {
+		return nil
+	}
+}
+
 // Viper is essentially repository for configurations
 
 // Get can retrieve any value given the key to use
@@ -346,11 +371,19 @@ func Get(key string) interface{} { return v.Get(key) }
 
 // Get is same as like named singleton (but drives off given *Viper)
 func (v *Viper) Get(key string) interface{} {
-	key = strings.ToLower(key)
-	val := v.find(key)
+	path := strings.Split(key, v.keyDelim)
+
+	val := v.find(strings.ToLower(key))
 
 	if val == nil {
-		return nil
+		source := v.find(path[0])
+		if source == nil {
+			return nil
+		}
+
+		if reflect.TypeOf(source).Kind() == reflect.Map {
+			val = v.searchMap(cast.ToStringMap(source), path[1:])
+		}
 	}
 
 	switch val.(type) {
