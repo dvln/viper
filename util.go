@@ -25,6 +25,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"unicode"
@@ -44,6 +45,10 @@ func insensitiviseMap(m map[string]interface{}) {
 		if key != lower {
 			delete(m, key)
 			m[lower] = val
+		}
+
+		if val != nil && reflect.TypeOf(val).Kind() == reflect.Map {
+			insensitiviseMap(cast.ToStringMap(val))
 		}
 	}
 }
