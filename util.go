@@ -165,7 +165,7 @@ func marshallConfigReader(in io.Reader, c map[string]interface{}, configType str
 		var p *properties.Properties
 		var err error
 		if p, err = properties.Load(buf.Bytes(), properties.UTF8); err != nil {
-			jww.ERROR.Fatalf("Error parsing config: %s", err)
+			out.Fatalf("Error parsing config: %s", err)
 		}
 		for _, key := range p.Keys() {
 			value, _ := p.Get(key)
