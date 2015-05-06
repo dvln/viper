@@ -45,7 +45,7 @@ import (
 	"strings"
 	"time"
 
-	"dvln/lib/out"
+	"github.com/dvln/out"
 
 	"github.com/kr/pretty"
 	"github.com/mitchellh/mapstructure"
