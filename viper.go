@@ -1,9 +1,7 @@
-// Tweaked copy of spf13's viper package.  Primary changes are to
-// use the 'dvln/out' package for output and some adjustments on those
-// output statements so they are more debugging/trace level statements
-// instead of standard info/print output (for dvln only errors with config
-// need to be seen, normal functionality should "just work" silently unless
-// one is asking for trace level detailed debugging).
+// Tweaked copy of spf13's viper package.  Primary changes are to use
+// the 'github/dvln/out' package for output and some adjustments on those
+// output statements so are fewer and more "trace" (verbose) debugging
+// level to avoid too much noise in regular debug output.
 //
 // Copyright from spf13:
 //
@@ -46,12 +44,81 @@ import (
 	"time"
 
 	"github.com/dvln/out"
-
 	"github.com/kr/pretty"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cast"
 	"github.com/spf13/pflag"
 	crypt "github.com/xordataexchange/crypt/config"
+)
+
+// UserAbility is a type that indicates the ability of a given user to use a
+// given configuration variable.
+type UserAbility int
+
+// Ability scopes, just integers at this point since they will be shoved
+// into the 'cfg' (viper) pkg which is a low level pkg. These indicate, for a
+// global, who is meant to use it in increasing levels of ability.
+// Yes, a type 'Ability' that is an 'int' might be nice but then viper would
+// need to know about it (since I'm putting this data there for now I've
+// chosen to keep it extra simple).
+const (
+	NoviceUser     UserAbility = iota // for novice level users
+	NormalUser                        // for "normal" level users
+	ExpertUser                        // for expert level users
+	AdminUser                         // for admin level users
+	InternalUse                       // for internal use primarily
+	RestrictedUse                     // for any (future) restricted global
+	UnknownAbility                    // in case we have no setting
+)
+
+// These fields describe where one can configure a given 'key' (glob variable)
+// from so that the calling tool can control which settings are honored.  Of
+// course CLI use/setting of a given variable/key must be configured elsewhere
+// such as via 'cobra' (the 'cli' commander pkg).
+// For 'dvln' needs I've updated the table to also include other ways that
+// variables/keys can be set so if you use this in your own library you can
+// ignore those levels or trim them out.  The order of evaluation for config
+// levels is:
+//    Overrides (set via this packages Set() method used after CLI processed)
+//    CLI (option given to the command line tool pushed into here via Set())
+//    Env (in the users env)
+//    Local Config File (in the users tool config file)
+//    Remote Key/Val (via a remote key/value store or config)
+//    Pkg Singleton Settings (dvln: on an individual "leaf" VCS package)
+//    Multi-Package (MPkg) Settings (dvln: on a multi-pkg VCS package)
+//    CodeBase Settings (dvln: on a codebase definition VCS package)
+//    Default Settings (viper: set via SetDefault(...)
+// Note that if keys (globals/variables) have augmented description data added
+// such as where they can be set, at which level(s), then settings at that
+// level for that variable should not be honored (only valid levels honored).
+// This is not fully implemented except for the 'dvln:' focused levels above.
+//
+// Feature: the VCS Pkg/Codebase related settings in terms of where keys (globs)
+//        can be set from, but the builtin 'viper' options don't yet honor
+//        these and could be modified to honor them coming up (ie: this way
+//        one can use this as a "globals" mechanism and avoid chances of clients
+//        overriding some settings via env or config file settings)
+const (
+	AvailCLI            = 1 << iota // global has a related CLI option available
+	AvailEnv                        // global can be set in DVLN_<GLOB>
+	AvailCfgFile                    // global can be set in dvln cfg file
+	AvailRemote                     // global can be set in remote cfg mechanism
+	AvailVCSPkg                     // global can be set on VCS pkg
+	AvailVCSMPkg                    // global can be set on VCS multi-pkg pkg
+	AvailVCSCodeBasePkg             // global can be set on VCS codebase pkg
+	AvailVCSHookPkg                 // global can be set on VCS hook pkg
+	AvailVCSPluginPkg               // global can be set on VCS plugin pkg
+
+	// Below we have common combinations of the above
+
+	BasicConst       = 0
+	BasicGlobal      = AvailEnv | AvailCfgFile
+	CLIGlobal        = AvailCLI | BasicGlobal
+	VCSGlobal        = AvailVCSPkg | AvailVCSMPkg | AvailVCSCodeBasePkg | AvailVCSHookPkg | AvailVCSPluginPkg
+	BasicVCSGlobal   = BasicGlobal | VCSGlobal
+	FullVCSGlobal    = CLIGlobal | VCSGlobal
+	BasicVCSCBGlobal = BasicGlobal | AvailVCSCodeBasePkg
+	FullVCSCBGlobal  = CLIGlobal | AvailVCSCodeBasePkg
 )
 
 var v *Viper
@@ -97,6 +164,7 @@ func (rce RemoteConfigError) Error() string {
 // 3. env. variables
 // 4. config file
 // 5. key/value store
+// 5 1/2. the dvln codebase and pkg settings fall into this area
 // 6. defaults
 //
 // For example, if values from the following sources were loaded:
@@ -146,8 +214,11 @@ type Viper struct {
 	defaults map[string]interface{}
 	kvstore  map[string]interface{}
 	pflags   map[string]*pflag.Flag
+	desc     map[string]string
 	env      map[string]string
 	aliases  map[string]string
+	ability  map[string]UserAbility
+	scope    map[string]int
 }
 
 // New returns an initialized Viper instance.
@@ -162,10 +233,13 @@ func New() *Viper {
 	v.pflags = make(map[string]*pflag.Flag)
 	v.env = make(map[string]string)
 	v.aliases = make(map[string]string)
+	v.desc = make(map[string]string)
+	v.ability = make(map[string]UserAbility)
+	v.scope = make(map[string]int)
 
 	wd, err := os.Getwd()
 	if err != nil {
-		out.Traceln("cfg: Could not add cwd to search paths", err)
+		out.Traceln("Could not add cwd to search paths, error:", err)
 	} else {
 		v.AddConfigPath(wd)
 	}
@@ -257,9 +331,9 @@ func AddConfigPath(in string) { v.AddConfigPath(in) }
 // AddConfigPath is same as like named singleton (but drives off given *Viper)
 func (v *Viper) AddConfigPath(in string) {
 	if in != "" {
-		absin := absPathify(in)
+		absin := AbsPathify(in)
 		out.Traceln("adding", absin, "to paths to search")
-		if !stringInSlice(absin, v.configPaths) {
+		if !StringInSlice(absin, v.configPaths) {
 			v.configPaths = append(v.configPaths, absin)
 		}
 	}
@@ -279,11 +353,11 @@ func AddRemoteProvider(provider, endpoint, path string) error {
 
 // AddRemoteProvider same as like named singleton (but drives off given *Viper)
 func (v *Viper) AddRemoteProvider(provider, endpoint, path string) error {
-	if !stringInSlice(provider, SupportedRemoteProviders) {
+	if !StringInSlice(provider, SupportedRemoteProviders) {
 		return UnsupportedRemoteProviderError(provider)
 	}
 	if provider != "" && endpoint != "" {
-		out.Tracef("cfg: adding %s:%s to remote provider list", provider, endpoint)
+		out.Tracef("adding %s:%s to remote provider list", provider, endpoint)
 		rp := &remoteProvider{
 			endpoint: endpoint,
 			provider: provider,
@@ -313,11 +387,11 @@ func AddSecureRemoteProvider(provider, endpoint, path, secretkeyring string) err
 // AddSecureRemoteProvider is same as like named singleton (but drives off
 // given *Viper)
 func (v *Viper) AddSecureRemoteProvider(provider, endpoint, path, secretkeyring string) error {
-	if !stringInSlice(provider, SupportedRemoteProviders) {
+	if !StringInSlice(provider, SupportedRemoteProviders) {
 		return UnsupportedRemoteProviderError(provider)
 	}
 	if provider != "" && endpoint != "" {
-		out.Tracef("cfg: adding %s:%s to remote provider list", provider, endpoint)
+		out.Tracef("adding %s:%s to remote provider list", provider, endpoint)
 		rp := &remoteProvider{
 			endpoint: endpoint,
 			provider: provider,
@@ -607,14 +681,14 @@ func (v *Viper) find(key string) interface{} {
 	flag, exists := v.pflags[key]
 	if exists {
 		if flag.Changed {
-			out.Traceln("cfg:", key, "found in override (via pflag):", val)
+			out.Tracef("'%s' found in override (via pflag): %v\n", key, val)
 			return flag.Value.String()
 		}
 	}
 
 	val, exists = v.override[key]
 	if exists {
-		out.Traceln("cfg:", key, "found in override:", val)
+		out.Tracef("'%s' found in override: %v\n", key, val)
 		return val
 	}
 
@@ -622,39 +696,40 @@ func (v *Viper) find(key string) interface{} {
 		// even if it hasn't been registered, if automaticEnv is used,
 		// check any Get request
 		if val = v.getEnv(v.mergeWithEnvPrefix(key)); val != "" {
-			out.Traceln("cfg:", key, "found in environment with val:", val)
+			out.Tracef("'%s' found in environment: %v\n", key, val)
 			return val
 		}
 	}
 
 	envkey, exists := v.env[key]
 	if exists {
-		out.Traceln("cfg:", key, "registered as env var", envkey)
+		out.Tracef("'%s' registered as env var: %s\n", key, envkey)
 		if val = v.getEnv(envkey); val != "" {
-			out.Traceln("cfg:", envkey, "found in environment with val:", val)
+			out.Tracef("'%s' found in environment: %v\n", envkey, val)
 			return val
 		}
-		out.Traceln("cfg:", envkey, "env value unset:")
+		out.Tracef("'%s' env value unset:\n", envkey)
 	}
 
 	val, exists = v.config[key]
 	if exists {
-		out.Traceln("cfg:", key, "found in config:", val)
+		out.Tracef("'%s' found in config: %v\n", key, val)
 		return val
 	}
 
 	val, exists = v.kvstore[key]
 	if exists {
-		out.Traceln("cfg:", key, "found in key/value store:", val)
+		out.Tracef("'%s' found in key/value store: %v\n", key, val)
 		return val
 	}
+
+	// Feature: need to add in codebase pkg settings to find()
 
 	val, exists = v.defaults[key]
 	if exists {
-		out.Traceln("cfg:", key, "found in defaults:", val)
+		out.Tracef("'%s' found in defaults: %v\n", key, val)
 		return val
 	}
-
 	return nil
 }
 
@@ -724,14 +799,14 @@ func (v *Viper) registerAlias(alias string, key string) {
 			v.aliases[alias] = key
 		}
 	} else {
-		out.Errorln("cfg: Creating circular reference alias:", alias, key, v.realKey(key))
+		out.Errorln("Creating circular reference alias:", alias, key, v.realKey(key))
 	}
 }
 
 func (v *Viper) realKey(key string) string {
 	newkey, exists := v.aliases[key]
 	if exists {
-		out.Traceln("cfg:", "Alias", key, "to", newkey)
+		out.Tracef("Alias '%s' to '%s'\n", key, newkey)
 		return v.realKey(newkey)
 	}
 	return key
@@ -760,6 +835,35 @@ func (v *Viper) SetDefault(key string, value interface{}) {
 	v.defaults[key] = value
 }
 
+// SetDesc sets the optional description for this key.
+func SetDesc(key string, desc string, userAbility UserAbility, cfgScope int) {
+	v.SetDesc(key, desc, userAbility, cfgScope)
+}
+
+// SetDesc is same as like named singleton (but drives off given *Viper)
+func (v *Viper) SetDesc(key string, desc string, userAbility UserAbility, cfgScope int) {
+	// If alias passed in, then set the proper default
+	key = v.realKey(strings.ToLower(key))
+	v.desc[key] = desc
+	v.ability[key] = userAbility
+	v.scope[key] = cfgScope
+}
+
+// Desc returns the description, if any, for the given key, if no desc then ""
+// for the description, UnknownAbility for UserAbility and 0 for where it can
+// be set from (ie: nowhere)
+func Desc(key string) (string, UserAbility, int) { return v.Desc(key) }
+
+// Desc is same as like named singleton (but drives off given *Viper)
+func (v *Viper) Desc(key string) (string, UserAbility, int) {
+	// If alias passed in, then set the proper default
+	key = v.realKey(strings.ToLower(key))
+	if val, ok := v.desc[key]; ok {
+		return val, v.ability[key], v.scope[key]
+	}
+	return "", UnknownAbility, 0
+}
+
 // Set Sets the value for the key in the override regiser.
 // Will be used instead of values obtained via
 // flags, config file, ENV, default, or key/value store
@@ -778,19 +882,24 @@ func ReadInConfig() error { return v.ReadInConfig() }
 
 // ReadInConfig is same as like named singleton (but drives off given *Viper)
 func (v *Viper) ReadInConfig() error {
-	out.Traceln("cfg: Attempting to read in config file")
-	if !stringInSlice(v.getConfigType(), SupportedExts) {
+	out.Traceln("Attempting to read in config file:")
+	if !StringInSlice(v.getConfigType(), SupportedExts) {
 		return UnsupportedConfigError(v.getConfigType())
 	}
 
-	file, err := ioutil.ReadFile(v.getConfigFile())
-	if err != nil {
+	fileName := v.getConfigFile()
+	fileContents, err := ioutil.ReadFile(fileName)
+	if fileName == "" {
+		out.Debugln("No config file found to read, skipping (considered normal)")
+		return err
+	} else if err != nil {
+		out.Debugf("Config file \"%s\" read failed\n  Error: %s\n", fileName, err)
 		return err
 	}
-
+	out.Tracef("---- Config file '%s' contents ----\n%s---- END ----\n", fileName, fileContents)
 	v.config = make(map[string]interface{})
 
-	v.marshalReader(bytes.NewReader(file), v.config)
+	v.marshalReader(bytes.NewReader(fileContents), v.config)
 	return nil
 }
 
@@ -963,11 +1072,11 @@ func (v *Viper) getConfigFile() string {
 }
 
 func (v *Viper) searchInPath(in string) (filename string) {
-	out.Debugln("cfg: Searching for config in ", in)
+	out.Traceln("Searching for config in", in)
 	for _, ext := range SupportedExts {
-		out.Debugln("cfg: Checking for", filepath.Join(in, v.configName+"."+ext))
-		if b, _ := exists(filepath.Join(in, v.configName+"."+ext)); b {
-			out.Debugln("Found: ", filepath.Join(in, v.configName+"."+ext))
+		out.Traceln("Checking for", filepath.Join(in, v.configName+"."+ext))
+		if b, _ := Exists(filepath.Join(in, v.configName+"."+ext)); b {
+			out.Traceln("Found:", filepath.Join(in, v.configName+"."+ext))
 			return filepath.Join(in, v.configName+"."+ext)
 		}
 	}
@@ -978,7 +1087,7 @@ func (v *Viper) searchInPath(in string) (filename string) {
 // findConfigFile searches all configPaths for any config file.
 // Returns the first path that exists (and is a config file)
 func (v *Viper) findConfigFile() (string, error) {
-	out.Traceln("cfg: Searching for config in ", v.configPaths)
+	out.Traceln("Searching for config in ", v.configPaths)
 
 	for _, cp := range v.configPaths {
 		file := v.searchInPath(cp)

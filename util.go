@@ -1,9 +1,6 @@
-// Modified copy of spf13's viper package.  Primary changes are to
-// use the 'dvln/out' package for output and some adjustments on those
-// output statements so they are more debugging/trace level statements
-// instead of standard info/print output (for dvln only errors with config
-// need to be seen, normal functionality should "just work" silently unless
-// one is asking for trace level detailed debugging).
+// Modified copy of spf13's viper util.go to trim out some debug statements
+// that seemed a bit too verbose (and switch them to 'out' pkg trace statements
+// in case they are wanted back one can uncomment them)
 //
 // Copyright from spf13:
 // Copyright © 2014 Steve Francia <spf@spf13.com>.
@@ -30,9 +27,8 @@ import (
 	"strings"
 	"unicode"
 
-	"dvln/lib/out"
-
 	"github.com/BurntSushi/toml"
+	"github.com/dvln/out"
 	"github.com/magiconair/properties"
 	"github.com/spf13/cast"
 	"gopkg.in/yaml.v2"
@@ -53,18 +49,22 @@ func insensitiviseMap(m map[string]interface{}) {
 	}
 }
 
-// absPathify takes a path and attempts to clean it up and turn
+// AbsPathify takes a path and attempts to clean it up and turn
 // it into an absolute path via filepath.Clean and filepath.Abs
-func absPathify(inPath string) string {
-	out.Traceln("Trying to resolve absolute path to", inPath)
+func AbsPathify(inPath string) string {
+	//out.Traceln("Trying to resolve absolute path to", inPath)
 
 	if strings.HasPrefix(inPath, "$HOME") {
-		inPath = userHomeDir() + inPath[5:]
+		inPath = UserHomeDir() + inPath[5:]
 	}
 
 	if strings.HasPrefix(inPath, "$") {
 		end := strings.Index(inPath, string(os.PathSeparator))
 		inPath = os.Getenv(inPath[1:end]) + inPath[end:]
+	}
+
+	if strings.HasPrefix(inPath, "~") {
+		inPath = UserHomeDir() + inPath[1:]
 	}
 
 	if filepath.IsAbs(inPath) {
@@ -75,13 +75,13 @@ func absPathify(inPath string) string {
 	if err == nil {
 		return filepath.Clean(p)
 	}
-	out.Errorln("Couldn't discover absolute path")
-	out.Errorln(err)
+	out.Errorln("Couldn't discover absolute path for:", inPath)
+	out.Errorln("  Error:", err)
 	return ""
 }
 
-// exists checks if given file/dir exists
-func exists(path string) (bool, error) {
+// Exists checks if given file/dir exists
+func Exists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
 		return true, nil
@@ -92,8 +92,8 @@ func exists(path string) (bool, error) {
 	return false, err
 }
 
-// stringInSlice is checking exactly that, is the string in the slice
-func stringInSlice(a string, list []string) bool {
+// StringInSlice is checking exactly that, is the string in the slice
+func StringInSlice(a string, list []string) bool {
 	for _, b := range list {
 		if b == a {
 			return true
@@ -102,8 +102,8 @@ func stringInSlice(a string, list []string) bool {
 	return false
 }
 
-// userHomeDir figures out the users home dir
-func userHomeDir() string {
+// UserHomeDir figures out the users home dir
+func UserHomeDir() string {
 	if runtime.GOOS == "windows" {
 		home := os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
 		if home == "" {
@@ -114,7 +114,8 @@ func userHomeDir() string {
 	return os.Getenv("HOME")
 }
 
-func findCWD() (string, error) {
+// FindCWD tries to find the current working directory
+func FindCWD() (string, error) {
 	serverFile, err := filepath.Abs(os.Args[0])
 
 	if err != nil {

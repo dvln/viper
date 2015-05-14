@@ -14,8 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"dvln/lib/out"
-
+	"github.com/dvln/out"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 )
@@ -339,10 +338,10 @@ func TestRecursiveAliases(t *testing.T) {
 	out.SetThreshold(out.LevelError, out.ForScreen)
 	out.SetWriter(out.LevelAll, screenBuf, out.ForScreen)
 
-	// Now set up a recursive alias, should produce an ERROR:
+	// Now set up a recursive alias, should produce an Error:
 	RegisterAlias("Baz", "Roo")
 	RegisterAlias("Roo", "baz")
-	assert.Contains(t, screenBuf.String(), "ERROR: cfg: Creating circular reference alias:")
+	assert.Contains(t, screenBuf.String(), "Error: Creating circular reference alias:")
 
 	// Reset the screen output threshold and screen writer for remaining
 	// tests in case they are needed
