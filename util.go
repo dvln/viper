@@ -141,32 +141,34 @@ func FindCWD() (string, error) {
 // marshallConfigReader reads from the given io.Reader and unmarshals
 // the results into the given map 'c' (adding to it potentially) for
 // the given config type (yaml/yml, json, toml) with case insensitive
-// keys (lower case basically)
-func marshallConfigReader(in io.Reader, c map[string]interface{}, configType string) {
+// keys (lower case basically) along with a description of what it
+// is we're trying to marshall so errors make some sense as this can
+// fatal error if problem marshalling.
+func marshallConfigReader(in io.Reader, c map[string]interface{}, configType string, desc string) {
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(in)
 
 	switch configType {
 	case "yaml", "yml":
 		if err := yaml.Unmarshal(buf.Bytes(), &c); err != nil {
-			out.Fatalf("Error parsing config: %s", err)
+			out.Fatalf("Error parsing %s:\n- Problem: %s", desc, err)
 		}
 
 	case "json":
 		if err := json.Unmarshal(buf.Bytes(), &c); err != nil {
-			out.Fatalf("Error parsing config: %s", err)
+			out.Fatalf("Error parsing %s:\n- Problem: %s", desc, err)
 		}
 
 	case "toml":
 		if _, err := toml.Decode(buf.String(), &c); err != nil {
-			out.Fatalf("Error parsing config: %s", err)
+			out.Fatalf("Error parsing %s:\n- Problem: %s", desc, err)
 		}
 
 	case "properties", "props", "prop":
 		var p *properties.Properties
 		var err error
 		if p, err = properties.Load(buf.Bytes(), properties.UTF8); err != nil {
-			out.Fatalf("Error parsing config: %s", err)
+			out.Fatalf("Error parsing %s:\n- Problem: %s", desc, err)
 		}
 		for _, key := range p.Keys() {
 			value, _ := p.Get(key)

@@ -900,7 +900,8 @@ func (v *Viper) ReadInConfig() error {
 	out.Tracef("---- Config file '%s' contents ----\n%s---- END ----\n", fileName, fileContents)
 	v.config = make(map[string]interface{})
 
-	v.marshalReader(bytes.NewReader(fileContents), v.config)
+	desc := fmt.Sprintf("tool config file \"%s\"", fileName)
+	v.marshalReader(bytes.NewReader(fileContents), v.config, desc)
 	return nil
 }
 
@@ -918,9 +919,9 @@ func (v *Viper) ReadRemoteConfig() error {
 }
 
 // marshalReader marshalls an io.Reader into a map
-func marshalReader(in io.Reader, c map[string]interface{}) { v.marshalReader(in, c) }
-func (v *Viper) marshalReader(in io.Reader, c map[string]interface{}) {
-	marshallConfigReader(in, c, v.getConfigType())
+func marshalReader(in io.Reader, c map[string]interface{}, desc string) { v.marshalReader(in, c, desc) }
+func (v *Viper) marshalReader(in io.Reader, c map[string]interface{}, desc string) {
+	marshallConfigReader(in, c, v.getConfigType(), desc)
 }
 
 func (v *Viper) insensitiviseMaps() {
@@ -973,7 +974,8 @@ func (v *Viper) getRemoteConfig(provider *remoteProvider) (map[string]interface{
 		return nil, err
 	}
 	reader := bytes.NewReader(b)
-	v.marshalReader(reader, v.kvstore)
+	desc := fmt.Sprintf("remote key/val config from %s", provider.provider)
+	v.marshalReader(reader, v.kvstore, desc)
 	return v.kvstore, err
 }
 
