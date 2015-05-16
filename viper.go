@@ -108,13 +108,14 @@ const (
 	AvailVCSCodeBasePkg             // global can be set on VCS codebase pkg
 	AvailVCSHookPkg                 // global can be set on VCS hook pkg
 	AvailVCSPluginPkg               // global can be set on VCS plugin pkg
+	AvailDefault                    // global value is coming from default setting
 
 	// Below we have common combinations of the above
 
-	BasicConst       = 0
-	BasicGlobal      = AvailEnv | AvailCfgFile
+	ConstGlobal      = AvailDefault
+	BasicGlobal      = AvailEnv | AvailCfgFile | AvailDefault
 	CLIGlobal        = AvailCLI | BasicGlobal
-	VCSGlobal        = AvailVCSPkg | AvailVCSMPkg | AvailVCSCodeBasePkg | AvailVCSHookPkg | AvailVCSPluginPkg
+	VCSGlobal        = AvailVCSPkg | AvailVCSMPkg | AvailVCSCodeBasePkg | AvailVCSHookPkg | AvailVCSPluginPkg | AvailDefault
 	BasicVCSGlobal   = BasicGlobal | VCSGlobal
 	FullVCSGlobal    = CLIGlobal | VCSGlobal
 	BasicVCSCBGlobal = BasicGlobal | AvailVCSCodeBasePkg
