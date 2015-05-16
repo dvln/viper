@@ -74,23 +74,23 @@ func initConfigs() {
 	Reset()
 	SetConfigType("yaml")
 	r := bytes.NewReader(yamlExample)
-	marshalReader(r, v.config)
+	marshalReader(r, v.config, "config in yaml")
 
 	SetConfigType("json")
 	r = bytes.NewReader(jsonExample)
-	marshalReader(r, v.config)
+	marshalReader(r, v.config, "config in json")
 
 	SetConfigType("properties")
 	r = bytes.NewReader(propertiesExample)
-	marshalReader(r, v.config)
+	marshalReader(r, v.config, "config in properties")
 
 	SetConfigType("toml")
 	r = bytes.NewReader(tomlExample)
-	marshalReader(r, v.config)
+	marshalReader(r, v.config, "config in toml")
 
 	SetConfigType("json")
 	remote := bytes.NewReader(remoteExample)
-	marshalReader(remote, v.kvstore)
+	marshalReader(remote, v.kvstore, "config in remote key/val store")
 }
 
 func initYAML() {
@@ -98,7 +98,7 @@ func initYAML() {
 	SetConfigType("yaml")
 	r := bytes.NewReader(yamlExample)
 
-	marshalReader(r, v.config)
+	marshalReader(r, v.config, "config in yaml")
 }
 
 func initJSON() {
@@ -106,7 +106,7 @@ func initJSON() {
 	SetConfigType("json")
 	r := bytes.NewReader(jsonExample)
 
-	marshalReader(r, v.config)
+	marshalReader(r, v.config, "config in json")
 }
 
 func initProperties() {
@@ -114,7 +114,7 @@ func initProperties() {
 	SetConfigType("properties")
 	r := bytes.NewReader(propertiesExample)
 
-	marshalReader(r, v.config)
+	marshalReader(r, v.config, "config in properties")
 }
 
 func initTOML() {
@@ -122,7 +122,7 @@ func initTOML() {
 	SetConfigType("toml")
 	r := bytes.NewReader(tomlExample)
 
-	marshalReader(r, v.config)
+	marshalReader(r, v.config, "config in toml")
 }
 
 //stubs for PFlag Values
@@ -160,7 +160,7 @@ func TestMarshalling(t *testing.T) {
 	SetConfigType("yaml")
 	r := bytes.NewReader(yamlExample)
 
-	marshalReader(r, v.config)
+	marshalReader(r, v.config, "config in yaml")
 	assert.True(t, InConfig("name"))
 	assert.False(t, InConfig("state"))
 	assert.Equal(t, "steve", Get("name"))
@@ -221,7 +221,7 @@ func TestRemotePrecedence(t *testing.T) {
 
 	remote := bytes.NewReader(remoteExample)
 	assert.Equal(t, "0001", Get("id"))
-	marshalReader(remote, v.kvstore)
+	marshalReader(remote, v.kvstore, "config in remote key/val store")
 	assert.Equal(t, "0001", Get("id"))
 	assert.NotEqual(t, "cronut", Get("type"))
 	assert.Equal(t, "remote", Get("newkey"))

@@ -288,13 +288,14 @@ func (v *Viper) SetConfigFile(in string) {
 // SetEnvPrefix defines a prefix that ENVIRONMENT variables will use.
 // E.g. if your prefix is "spf", the env registry
 // will look for env. variables that start with "SPF_"
-func SetEnvPrefix(in string) { v.SetEnvPrefix(in) }
+func SetEnvPrefix(in string) string { return v.SetEnvPrefix(in) }
 
 // SetEnvPrefix is same as like named singleton method (drives off given *Viper)
-func (v *Viper) SetEnvPrefix(in string) {
+func (v *Viper) SetEnvPrefix(in string) string {
 	if in != "" {
 		v.envPrefix = in
 	}
+	return in
 }
 
 func (v *Viper) mergeWithEnvPrefix(in string) string {
@@ -848,6 +849,11 @@ func (v *Viper) SetDesc(key string, desc string, userAbility UserAbility, cfgSco
 	v.desc[key] = desc
 	v.ability[key] = userAbility
 	v.scope[key] = cfgScope
+	// if the config scope is that this should be settable via env setting then
+	// lets bind this glob (key) so it is available via the env
+	if cfgScope&AvailEnv != 0 {
+		v.BindEnv(key)
+	}
 }
 
 // Desc returns the description, if any, for the given key, if no desc then ""
