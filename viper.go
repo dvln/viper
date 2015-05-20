@@ -51,24 +51,21 @@ import (
 	crypt "github.com/xordataexchange/crypt/config"
 )
 
-// UserAbility is a type that indicates the ability of a given user to use a
-// given configuration variable.
-type UserAbility int
+// UseLevel is a type that indicates the level of user should be "at" to use a
+// given config key (variable)... meaning they likely don't want to be setting
+// or playing with it until they reach a given level (or maybe never at all if
+// it is an internal use key/variable setting)
+type UseLevel int
 
-// Ability scopes, just integers at this point since they will be shoved
-// into the 'cfg' (viper) pkg which is a low level pkg. These indicate, for a
-// global, who is meant to use it in increasing levels of ability.
-// Yes, a type 'Ability' that is an 'int' might be nice but then viper would
-// need to know about it (since I'm putting this data there for now I've
-// chosen to keep it extra simple).
+// UseLevels available, just integers at this point
 const (
-	NoviceUser     UserAbility = iota // for novice level users
-	NormalUser                        // for "normal" level users
-	ExpertUser                        // for expert level users
-	AdminUser                         // for admin level users
-	InternalUse                       // for internal use primarily
-	RestrictedUse                     // for any (future) restricted global
-	UnknownAbility                    // in case we have no setting
+	NoviceUser      UseLevel = iota // for novice level users
+	StandardUser                    // for "normal" level users
+	ExpertUser                      // for expert level users
+	AdminUser                       // for admin level users
+	InternalUse                     // for internal use primarily, hides it
+	RestrictedUse                   // for any (future) restricted global
+	UnknownUseLevel                 // in case we have no setting
 )
 
 // These fields describe where one can configure a given 'key' (glob variable)
@@ -126,6 +123,17 @@ var v *Viper
 
 func init() {
 	v = New()
+	// If you fork this remove this below line or replace it with your own pfx
+	// as this is NOT generic.  It's here because 'dvln' uses init() methods
+	// to bootstrap viper settings and viper's is the lowest level init() that
+	// we know will run before the init()'s from the various packages using
+	// viper... and we want DVLN set for the "general" viper instance early...
+	// if we set it in a 'var' in a package or in each init() that bootstraps
+	// viper values then it has to be listed in *all* packages that use viper
+	// values... that's annoying and likely something folks will forget.  Didn't
+	// see a way other than this to insure DVLN is set for all viper users for
+	// the singleton viper.
+	v.SetEnvPrefix("DVLN")
 }
 
 // UnsupportedConfigError denotes encountering an unsupported
@@ -218,7 +226,7 @@ type Viper struct {
 	desc     map[string]string
 	env      map[string]string
 	aliases  map[string]string
-	ability  map[string]UserAbility
+	uselevel map[string]UseLevel
 	scope    map[string]int
 }
 
@@ -235,7 +243,7 @@ func New() *Viper {
 	v.env = make(map[string]string)
 	v.aliases = make(map[string]string)
 	v.desc = make(map[string]string)
-	v.ability = make(map[string]UserAbility)
+	v.uselevel = make(map[string]UseLevel)
 	v.scope = make(map[string]int)
 
 	wd, err := os.Getwd()
@@ -288,14 +296,13 @@ func (v *Viper) SetConfigFile(in string) {
 // SetEnvPrefix defines a prefix that ENVIRONMENT variables will use.
 // E.g. if your prefix is "spf", the env registry
 // will look for env. variables that start with "SPF_"
-func SetEnvPrefix(in string) string { return v.SetEnvPrefix(in) }
+func SetEnvPrefix(in string) { v.SetEnvPrefix(in) }
 
 // SetEnvPrefix is same as like named singleton method (drives off given *Viper)
-func (v *Viper) SetEnvPrefix(in string) string {
+func (v *Viper) SetEnvPrefix(in string) {
 	if in != "" {
 		v.envPrefix = in
 	}
-	return in
 }
 
 func (v *Viper) mergeWithEnvPrefix(in string) string {
@@ -591,6 +598,48 @@ func (v *Viper) Marshal(rawVal interface{}) error {
 	return nil
 }
 
+// SetPFlags informs viper about CLI flags so it knows what key settings come
+// from the command line.  It can be used when viper/cobra/pflags are being used
+// in concert *AND* when one wishes to pre-set all defaults manually (if you do
+// not wish to do that instead use BindPFlags and not SetPFlags).  The difference
+// is that this visits all flags and *only* if they are "Changed" (from the CLI)
+// does it identify them as "active" pflags (vs BindPFlags which sets every flag
+// in existence into v.pflags[] and uses SetDefault() so vipers default value
+// comes from the flags default value setting... to use SetPFlags you should
+// have manually set the starting default value for each flag).  So here we only
+// put them used CLI's in v.pflags[] and we only use v.Set() to push used CLI
+// args in at the v.override[] level (avoids having the app do these Set's).
+// Goal: this can tie in later w/support for no args to strings/ints/bools where
+// the default would be to take the *options* defined default (thereby putting
+// it into play) over the already pre-set default (if/when desired only)
+func SetPFlags(flags *pflag.FlagSet) (err error) { return v.SetPFlags(flags) }
+
+// SetPFlags is same as like named singleton (but drives off given *Viper)
+func (v *Viper) SetPFlags(flags *pflag.FlagSet) (err error) {
+	flags.VisitAll(func(flag *pflag.Flag) {
+		if err != nil {
+			// an error has been encountered in one of the previous flags
+			return
+		}
+		// If we have a flag and it was used/changed on the CLI:
+		if flag.Name != "" && flags.Lookup(flag.Name).Changed {
+			flagName := strings.ToLower(flag.Name)
+			// Then shove it in as a *used* pflags option
+			v.pflags[flagName] = flag
+			// And put it in as an override setting
+			switch flag.Value.Type() {
+			case "int", "int8", "int16", "int32", "int64":
+				v.Set(flagName, cast.ToInt(flag.Value.String()))
+			case "bool":
+				v.Set(flagName, cast.ToBool(flag.Value.String()))
+			default:
+				v.Set(flagName, flag.Value.String())
+			}
+		}
+	})
+	return
+}
+
 // BindPFlags finds a full flag set to the configuration, using each flag's long
 // name as the config key.
 func BindPFlags(flags *pflag.FlagSet) (err error) { return v.BindPFlags(flags) }
@@ -683,6 +732,7 @@ func (v *Viper) find(key string) interface{} {
 	flag, exists := v.pflags[key]
 	if exists {
 		if flag.Changed {
+			val, exists = v.override[key]
 			out.Tracef("'%s' found in override (via pflag): %v\n", key, val)
 			return flag.Value.String()
 		}
@@ -705,12 +755,13 @@ func (v *Viper) find(key string) interface{} {
 
 	envkey, exists := v.env[key]
 	if exists {
-		out.Tracef("'%s' registered as env var: %s\n", key, envkey)
 		if val = v.getEnv(envkey); val != "" {
-			out.Tracef("'%s' found in environment: %v\n", envkey, val)
+			out.Tracef("'%s' found in env: %v\n", envkey, val)
 			return val
 		}
-		out.Tracef("'%s' env value unset:\n", envkey)
+		// Feature: could put this in a viper testing-only mode, but otherwise
+		// it's too verbose so simply disable for now
+		//out.Tracef("'%s' was checked in env, not found\n", envkey)
 	}
 
 	val, exists = v.config[key]
@@ -838,16 +889,16 @@ func (v *Viper) SetDefault(key string, value interface{}) {
 }
 
 // SetDesc sets the optional description for this key.
-func SetDesc(key string, desc string, userAbility UserAbility, cfgScope int) {
-	v.SetDesc(key, desc, userAbility, cfgScope)
+func SetDesc(key string, desc string, useLevel UseLevel, cfgScope int) {
+	v.SetDesc(key, desc, useLevel, cfgScope)
 }
 
 // SetDesc is same as like named singleton (but drives off given *Viper)
-func (v *Viper) SetDesc(key string, desc string, userAbility UserAbility, cfgScope int) {
+func (v *Viper) SetDesc(key string, desc string, useLevel UseLevel, cfgScope int) {
 	// If alias passed in, then set the proper default
 	key = v.realKey(strings.ToLower(key))
 	v.desc[key] = desc
-	v.ability[key] = userAbility
+	v.uselevel[key] = useLevel
 	v.scope[key] = cfgScope
 	// if the config scope is that this should be settable via env setting then
 	// lets bind this glob (key) so it is available via the env
@@ -857,18 +908,18 @@ func (v *Viper) SetDesc(key string, desc string, userAbility UserAbility, cfgSco
 }
 
 // Desc returns the description, if any, for the given key, if no desc then ""
-// for the description, UnknownAbility for UserAbility and 0 for where it can
+// for the description, UnknownUseLevel for UseLevel and 0 for where it can
 // be set from (ie: nowhere)
-func Desc(key string) (string, UserAbility, int) { return v.Desc(key) }
+func Desc(key string) (string, UseLevel, int) { return v.Desc(key) }
 
 // Desc is same as like named singleton (but drives off given *Viper)
-func (v *Viper) Desc(key string) (string, UserAbility, int) {
+func (v *Viper) Desc(key string) (string, UseLevel, int) {
 	// If alias passed in, then set the proper default
 	key = v.realKey(strings.ToLower(key))
 	if val, ok := v.desc[key]; ok {
-		return val, v.ability[key], v.scope[key]
+		return val, v.uselevel[key], v.scope[key]
 	}
-	return "", UnknownAbility, 0
+	return "", UnknownUseLevel, 0
 }
 
 // Set Sets the value for the key in the override regiser.
@@ -1081,9 +1132,12 @@ func (v *Viper) getConfigFile() string {
 }
 
 func (v *Viper) searchInPath(in string) (filename string) {
-	out.Traceln("Searching for config in", in)
+	// The full search path is dumped via Trace output already, skip it here
+	// out.Traceln("Searching for config in", in)
 	for _, ext := range SupportedExts {
-		out.Traceln("Checking for", filepath.Join(in, v.configName+"."+ext))
+		// We know the check works, already know what we're scanning for and
+		// since we print out any config file we do find (below), skip this
+		// out.Traceln("Checking for", filepath.Join(in, v.configName+"."+ext))
 		if b, _ := Exists(filepath.Join(in, v.configName+"."+ext)); b {
 			out.Traceln("Found:", filepath.Join(in, v.configName+"."+ext))
 			return filepath.Join(in, v.configName+"."+ext)
@@ -1120,18 +1174,105 @@ func Debug() { v.Debug() }
 
 // Debug is same as like named singleton (but drives off given *Viper)
 func (v *Viper) Debug() {
-	out.Debugln("Aliases:")
-	out.Debug(pretty.Sprintln(v.aliases))
-	out.Debugln("Override:")
-	out.Debug(pretty.Sprintln(v.override))
-	out.Debugln("PFlags")
-	out.Debug(pretty.Sprintln(v.pflags))
-	out.Debugln("Env:")
-	out.Debug(pretty.Sprintln(v.env))
-	out.Debugln("Key/Value Store:")
-	out.Debug(pretty.Sprintln(v.kvstore))
-	out.Debugln("Config:")
-	out.Debug(pretty.Sprintln(v.config))
-	out.Debugln("Defaults:")
-	out.Debug(pretty.Sprintln(v.defaults))
+	out.Traceln("Aliases:")
+	out.Trace(pretty.Sprintln(v.aliases))
+	out.Traceln("Override:")
+	out.Trace(pretty.Sprintln(v.override))
+	out.Traceln("PFlags")
+	out.Trace(pretty.Sprintln(v.pflags))
+	out.Traceln("Env:")
+	out.Trace(pretty.Sprintln(v.env))
+	out.Traceln("Key/Value Store:")
+	out.Trace(pretty.Sprintln(v.kvstore))
+	out.Traceln("Config:")
+	out.Trace(pretty.Sprintln(v.config))
+	out.Traceln("Defaults:")
+	out.Trace(pretty.Sprintln(v.defaults))
+}
+
+// GetConfig will return a string with available config settings through either
+// the env or via the config file so the user can see:
+// - what settings are available, what is their current val (at least)
+// - optionally show description and a user expertise level recommended
+// The verbosity desired ("verbose", "regular", "terse") is passed in
+// along with the output "look" desired ("text" or "json").
+func GetConfig(lvl string) string { return v.GetConfig(lvl) }
+
+// GetConfig is same as like named singleton (but drives off given *Viper)
+func (v *Viper) GetConfig(lvl string) string {
+	//eriknow: use verbose and look settings internally in viper, sweet  ;),
+	//         need to think, don't want this depending upon my cheesy JSON
+	//         formatting library from within 'viper', can return "raw" JSON
+	//         format though and we can then pretty up the output (?)
+	return ""
+	//eriknow: for everything in the desc[key] map we will
+	// "do the right thing and either lower case it or merge with env
+	// prefix (depending upon what's desired)" and indicate what
+	// is available/set/etc and it's current value and such (and
+	// long could indicate from where that value came potentially?)
+	/*
+		var key, envkey string
+		if len(input) == 0 {
+			return fmt.Errorf("BindEnv missing key to bind to")
+		}
+
+		key = strings.ToLower(input[0])
+
+		if len(input) == 1 {
+			envkey = v.mergeWithEnvPrefix(key)
+		} else {
+			envkey = input[1]
+		}
+
+		v.env[key] = envkey
+
+		return nil
+	*/
+}
+
+// String implements a stringer for the UseLevel type so we can print out
+// a string representations for the user use level setting
+func (a UseLevel) String() string {
+	uselevel2String := map[UseLevel]string{
+		NoviceUser:      "NOVICE",
+		StandardUser:    "STANDARD",
+		ExpertUser:      "EXPERT",
+		AdminUser:       "ADMIN",
+		InternalUse:     "INTERNAL",
+		RestrictedUse:   "RESTRICTED",
+		UnknownUseLevel: "UNKNOWN",
+	}
+	a = useLevelCheck(a)
+	return uselevel2String[a]
+}
+
+// UseLevelString2UseLevel takes the string representation of a user/use level
+// and returns the UseLevel (Go type) that maps to that string, if mapping
+// fails the unknown use level comes back for now
+func UseLevelString2UseLevel(s string) UseLevel {
+	string2UseLevel := map[string]UseLevel{
+		"NOVICE":     NoviceUser,
+		"STANDARD":   StandardUser,
+		"EXPERT":     ExpertUser,
+		"ADMIN":      AdminUser,
+		"INTERNAL":   InternalUse,
+		"RESTRICTED": RestrictedUse,
+		"UNKNOWN":    UnknownUseLevel,
+	}
+	if _, ok := string2UseLevel[s]; !ok {
+		return UnknownUseLevel
+	}
+	return string2UseLevel[s]
+}
+
+// useLevelCheck insures valid user/use level value is provided
+func useLevelCheck(useLevel UseLevel) UseLevel {
+	switch {
+	case useLevel <= NoviceUser:
+		return NoviceUser
+	case useLevel >= UnknownUseLevel:
+		return UnknownUseLevel
+	default:
+		return UnknownUseLevel
+	}
 }
