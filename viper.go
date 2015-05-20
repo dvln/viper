@@ -1200,32 +1200,29 @@ func GetConfig(lvl string) string { return v.GetConfig(lvl) }
 
 // GetConfig is same as like named singleton (but drives off given *Viper)
 func (v *Viper) GetConfig(lvl string) string {
-	//eriknow: use verbose and look settings internally in viper, sweet  ;),
-	//         need to think, don't want this depending upon my cheesy JSON
-	//         formatting library from within 'viper', can return "raw" JSON
-	//         format though and we can then pretty up the output (?)
+	//FIXME: use verbose/terse and txt/json "look" settings as args
+    //    and output flag JSON (client can pretty-iffy the JSON if
+	//    desired ... also return formatted text format
+	//    Note that for everything in the desc[key] map we will
+	//    "do the right thing and either lower case it or merge with env
+	//    prefix (depending upon what's desired)" and indicate what
+	//    is available/set/etc and it's current value and such (and
+	//    long could indicate from where that value came potentially?)
+	//    - could consider tweaking names to mixed case and support
+	//      snake case for JSON representation (?)
 	return ""
-	//eriknow: for everything in the desc[key] map we will
-	// "do the right thing and either lower case it or merge with env
-	// prefix (depending upon what's desired)" and indicate what
-	// is available/set/etc and it's current value and such (and
-	// long could indicate from where that value came potentially?)
 	/*
 		var key, envkey string
 		if len(input) == 0 {
 			return fmt.Errorf("BindEnv missing key to bind to")
 		}
-
 		key = strings.ToLower(input[0])
-
 		if len(input) == 1 {
 			envkey = v.mergeWithEnvPrefix(key)
 		} else {
 			envkey = input[1]
 		}
-
 		v.env[key] = envkey
-
 		return nil
 	*/
 }
