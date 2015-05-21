@@ -121,6 +121,11 @@ const (
 
 var v *Viper
 
+// GetSingleton allows one to grab the package global viper instance
+func GetSingleton() *Viper {
+	return v
+}
+
 func init() {
 	v = New()
 	// If you fork this remove this below line or replace it with your own pfx
@@ -1190,18 +1195,46 @@ func (v *Viper) Debug() {
 	out.Trace(pretty.Sprintln(v.defaults))
 }
 
-// GetConfig will return a string with available config settings through either
+// StringLook is used for the String() method to dump a viper's user focused
+// info (relating to what the DE can set in the env or in a config file) and
+// will be a string set to either "json" or "text" (ie: String() will examine
+// viper settings and get whatever "look" is set to and use that as the look)
+var StringLook = "look"
+
+// StringVerbose is used to decide to dump the information verbosely or not,
+// so if "verbose" is set to 'true' (as a viper key) then verbose output is on
+var StringVerbose = "verbose"
+
+// StringTerse is used to dump brief information about the viper cfg|env, so
+// if "terse" is set as a key and is true then a reduced amount of data will
+// be dumped (note that StringVerbose's setting, if set, overrides this)
+var StringTerse = "terse"
+
+// String will return a string with available config settings through either
 // the env or via the config file so the user can see:
 // - what settings are available, what is their current val (at least)
 // - optionally show description and a user expertise level recommended
-// The verbosity desired ("verbose", "regular", "terse") is passed in
-// along with the output "look" desired ("text" or "json").
-func GetConfig(lvl string) string { return v.GetConfig(lvl) }
-
-// GetConfig is same as like named singleton (but drives off given *Viper)
-func (v *Viper) GetConfig(lvl string) string {
-	//FIXME: use verbose/terse and txt/json "look" settings as args
-    //    and output flag JSON (client can pretty-iffy the JSON if
+// This method leverages viper itself to decide what the look/format of
+// the string is (text or json) and how to determine if verbose or
+// terse mode is active via the exported package globs:
+// - StringLook defaults to "look" as the key to look for "text|json"
+// - StringTerse defaults to "terse" as the key, if true then terse
+// - StringVerbose defaults to "verbose" as the key, if true then verbose (overrides terse)
+func (v *Viper) String() string {
+	verbosity := "regular"
+	if v.GetBool(StringVerbose) {
+		verbosity = "verbose"
+	} else if v.GetBool(StringTerse) {
+		verbosity = "terse"
+	}
+	// get the "look" (or format) of the outpu, "json" else defaults to text
+	look := v.GetString(StringLook)
+	if look == "json" {
+		return "{ \"output\": \"" + verbosity + " json look" + "\" }\n"
+	}
+	return verbosity + " text look\n"
+	//FIXME: eriknow, use verbose/terse and txt/json "look" settings as args
+	//    and output flag JSON (client can pretty-iffy the JSON if
 	//    desired ... also return formatted text format
 	//    Note that for everything in the desc[key] map we will
 	//    "do the right thing and either lower case it or merge with env
@@ -1210,7 +1243,6 @@ func (v *Viper) GetConfig(lvl string) string {
 	//    long could indicate from where that value came potentially?)
 	//    - could consider tweaking names to mixed case and support
 	//      snake case for JSON representation (?)
-	return ""
 	/*
 		var key, envkey string
 		if len(input) == 0 {
