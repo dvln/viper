@@ -34,12 +34,14 @@ package viper
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -231,8 +233,8 @@ type Viper struct {
 	desc     map[string]string
 	env      map[string]string
 	aliases  map[string]string
-	uselevel map[string]UseLevel
-	scope    map[string]int
+	useLevel map[string]UseLevel
+	useScope map[string]int
 }
 
 // New returns an initialized Viper instance.
@@ -248,8 +250,8 @@ func New() *Viper {
 	v.env = make(map[string]string)
 	v.aliases = make(map[string]string)
 	v.desc = make(map[string]string)
-	v.uselevel = make(map[string]UseLevel)
-	v.scope = make(map[string]int)
+	v.useLevel = make(map[string]UseLevel)
+	v.useScope = make(map[string]int)
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -894,20 +896,20 @@ func (v *Viper) SetDefault(key string, value interface{}) {
 }
 
 // SetDesc sets the optional description for this key.
-func SetDesc(key string, desc string, useLevel UseLevel, cfgScope int) {
-	v.SetDesc(key, desc, useLevel, cfgScope)
+func SetDesc(key string, desc string, useLevel UseLevel, useScope int) {
+	v.SetDesc(key, desc, useLevel, useScope)
 }
 
 // SetDesc is same as like named singleton (but drives off given *Viper)
-func (v *Viper) SetDesc(key string, desc string, useLevel UseLevel, cfgScope int) {
+func (v *Viper) SetDesc(key string, desc string, useLevel UseLevel, useScope int) {
 	// If alias passed in, then set the proper default
 	key = v.realKey(strings.ToLower(key))
 	v.desc[key] = desc
-	v.uselevel[key] = useLevel
-	v.scope[key] = cfgScope
+	v.useLevel[key] = useLevel
+	v.useScope[key] = useScope
 	// if the config scope is that this should be settable via env setting then
 	// lets bind this glob (key) so it is available via the env
-	if cfgScope&AvailEnv != 0 {
+	if useScope&AvailEnv != 0 {
 		v.BindEnv(key)
 	}
 }
@@ -922,7 +924,7 @@ func (v *Viper) Desc(key string) (string, UseLevel, int) {
 	// If alias passed in, then set the proper default
 	key = v.realKey(strings.ToLower(key))
 	if val, ok := v.desc[key]; ok {
-		return val, v.uselevel[key], v.scope[key]
+		return val, v.useLevel[key], v.useScope[key]
 	}
 	return "", UnknownUseLevel, 0
 }
@@ -1195,20 +1197,25 @@ func (v *Viper) Debug() {
 	out.Trace(pretty.Sprintln(v.defaults))
 }
 
-// StringLook is used for the String() method to dump a viper's user focused
+// LookName is used for the String() method to dump a viper's user focused
 // info (relating to what the DE can set in the env or in a config file) and
 // will be a string set to either "json" or "text" (ie: String() will examine
 // viper settings and get whatever "look" is set to and use that as the look)
-var StringLook = "look"
+var LookName = "look"
 
-// StringVerbose is used to decide to dump the information verbosely or not,
+// VerboseName is used to decide to dump the information verbosely or not,
 // so if "verbose" is set to 'true' (as a viper key) then verbose output is on
-var StringVerbose = "verbose"
+var VerboseName = "verbose"
 
-// StringTerse is used to dump brief information about the viper cfg|env, so
+// TerseName is used to dump brief information about the viper cfg|env, so
 // if "terse" is set as a key and is true then a reduced amount of data will
-// be dumped (note that StringVerbose's setting, if set, overrides this)
-var StringTerse = "terse"
+// be dumped (note that VerboseName's setting, if set, overrides this)
+var TerseName = "terse"
+
+// UserCfgTypeName is the viper config key that will be a string of either 'cfg'
+// or 'env' to control the String() method returning data about what keys
+// can be set in the config file or what env vars can be used by the user
+var UserCfgTypeName = "globs"
 
 // String will return a string with available config settings through either
 // the env or via the config file so the user can see:
@@ -1217,52 +1224,81 @@ var StringTerse = "terse"
 // This method leverages viper itself to decide what the look/format of
 // the string is (text or json) and how to determine if verbose or
 // terse mode is active via the exported package globs:
-// - StringLook defaults to "look" as the key to look for "text|json"
-// - StringTerse defaults to "terse" as the key, if true then terse
-// - StringVerbose defaults to "verbose" as the key, if true then verbose (overrides terse)
+// - LookName defaults to "look" as the key to look for "text|json"
+// - TerseName defaults to "terse" as the key, if true then terse
+// - VerboseName defaults to "verbose" as the key, if true then verbose (overrides terse)
 func (v *Viper) String() string {
 	verbosity := "regular"
-	if v.GetBool(StringVerbose) {
+	if v.GetBool(VerboseName) {
 		verbosity = "verbose"
-	} else if v.GetBool(StringTerse) {
+	} else if v.GetBool(TerseName) {
 		verbosity = "terse"
 	}
 	// get the "look" (or format) of the outpu, "json" else defaults to text
-	look := v.GetString(StringLook)
-	if look == "json" {
-		return "{ \"output\": \"" + verbosity + " json look" + "\" }\n"
+	look := v.GetString(LookName)
+	// config "globs" type desired ("env" for env vars, "cfg" for cfgfile)
+	cfgGlobType := v.GetString(UserCfgTypeName)
+
+	//eriknow... need to re-work the text and JSON output now, see ~/dvln.txt
+	//           for how this will be done (following Google json guidelines)
+	//           and the use of a "growing" map structure in the 'out' pkg
+	keys := []string{}
+	for k := range v.desc {
+		keys = append(keys, k)
 	}
-	return verbosity + " text look\n"
-	//FIXME: eriknow, use verbose/terse and txt/json "look" settings as args
-	//    and output flag JSON (client can pretty-iffy the JSON if
-	//    desired ... also return formatted text format
-	//    Note that for everything in the desc[key] map we will
-	//    "do the right thing and either lower case it or merge with env
-	//    prefix (depending upon what's desired)" and indicate what
-	//    is available/set/etc and it's current value and such (and
-	//    long could indicate from where that value came potentially?)
-	//    - could consider tweaking names to mixed case and support
-	//      snake case for JSON representation (?)
-	/*
-		var key, envkey string
-		if len(input) == 0 {
-			return fmt.Errorf("BindEnv missing key to bind to")
+	sort.Strings(keys)
+	type keyData struct {
+		Description string      `json:"description,omitempty"`
+		UseLevel    string      `json:"useLevel,omitempty"`
+		Value       interface{} `json:"value,omitempty"`
+	}
+	type setting struct {
+		Name string `json:"name,omitempty"`
+		keyData
+	}
+	settings := make([]setting, 0, 0)
+	for _, k := range keys {
+		//eriknow... this will have to change once done with the above
+		var keyName string
+		useKey := false
+		useScope := v.useScope[k]
+		if cfgGlobType == "cfg" && (useScope&AvailCfgFile) != 0 {
+			keyName = k
+			useKey = true
+		} else if cfgGlobType == "env" && (useScope&AvailEnv) != 0 {
+			keyName = v.mergeWithEnvPrefix(k)
+			useKey = true
 		}
-		key = strings.ToLower(input[0])
-		if len(input) == 1 {
-			envkey = v.mergeWithEnvPrefix(key)
-		} else {
-			envkey = input[1]
+		if !useKey {
+			continue
 		}
-		v.env[key] = envkey
-		return nil
-	*/
+		var oneEntry setting
+		oneEntry.Name = keyName
+		if verbosity != "terse" {
+			oneEntry.Description = v.desc[k]
+			oneEntry.Value = v.Get(k)
+		}
+		if verbosity == "verbose" {
+			oneEntry.UseLevel = fmt.Sprintf("%s", v.useLevel[k])
+		}
+		settings = append(settings, oneEntry)
+	}
+
+	if look == "json" {
+		j, err := json.Marshal(settings)
+		if err != nil {
+			out.Issueln("Failed to convert settings to JSON:", err)
+			return ""
+		}
+		return string(j)
+	}
+	return pretty.Sprintf("%# v", settings)
 }
 
 // String implements a stringer for the UseLevel type so we can print out
 // a string representations for the user use level setting
-func (a UseLevel) String() string {
-	uselevel2String := map[UseLevel]string{
+func (ul UseLevel) String() string {
+	useLevel2String := map[UseLevel]string{
 		NoviceUser:      "NOVICE",
 		StandardUser:    "STANDARD",
 		ExpertUser:      "EXPERT",
@@ -1271,8 +1307,8 @@ func (a UseLevel) String() string {
 		RestrictedUse:   "RESTRICTED",
 		UnknownUseLevel: "UNKNOWN",
 	}
-	a = useLevelCheck(a)
-	return uselevel2String[a]
+	ul = useLevelCheck(ul)
+	return useLevel2String[ul]
 }
 
 // UseLevelString2UseLevel takes the string representation of a user/use level
@@ -1302,6 +1338,6 @@ func useLevelCheck(useLevel UseLevel) UseLevel {
 	case useLevel >= UnknownUseLevel:
 		return UnknownUseLevel
 	default:
-		return UnknownUseLevel
+		return useLevel
 	}
 }
