@@ -1242,21 +1242,23 @@ func (v *Viper) String() string {
 	//eriknow... need to re-work the text and JSON output now, see ~/dvln.txt
 	//           for how this will be done (following Google json guidelines)
 	//           and the use of a "growing" map structure in the 'out' pkg
+
+	// Only "document" those settings that have descriptions, alphabetically:
 	keys := []string{}
 	for k := range v.desc {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	type keyData struct {
-		Description string      `json:"description,omitempty"`
-		UseLevel    string      `json:"useLevel,omitempty"`
-		Value       interface{} `json:"value,omitempty"`
+
+	//eriknow: need to think about omitempty for text output, honoring it in pretty
+	//         or shifting away from pretty into JSON and then munge that output and
+	//         add in field alignment like pretty, etc
+	type itemData struct {
+		Description string      `json:"description,omitempty" pretty:"Description,omitempty"`
+		UseLevel    string      `json:"useLevel,omitempty" pretty:"Use Level,omitempty"`
+		Value       interface{} `json:"value"`
 	}
-	type setting struct {
-		Name string `json:"name,omitempty"`
-		keyData
-	}
-	settings := make([]setting, 0, 0)
+	items := make([]interface{}, 0, 0)
 	for _, k := range keys {
 		//eriknow... this will have to change once done with the above
 		var keyName string
@@ -1268,31 +1270,42 @@ func (v *Viper) String() string {
 		} else if cfgGlobType == "env" && (useScope&AvailEnv) != 0 {
 			keyName = v.mergeWithEnvPrefix(k)
 			useKey = true
+
 		}
 		if !useKey {
 			continue
 		}
-		var oneEntry setting
-		oneEntry.Name = keyName
+		var data itemData
 		if verbosity != "terse" {
-			oneEntry.Description = v.desc[k]
-			oneEntry.Value = v.Get(k)
+			data.Description = v.desc[k]
+			data.Value = v.Get(k)
 		}
 		if verbosity == "verbose" {
-			oneEntry.UseLevel = fmt.Sprintf("%s", v.useLevel[k])
+			data.UseLevel = fmt.Sprintf("%s", v.useLevel[k])
 		}
-		settings = append(settings, oneEntry)
+		// if we're in terse mode just put the names on the list
+		if data.Description == "" {
+			items = append(items, keyName)
+		} else { // otherwise load up the key/value info
+			currItem := make(map[string]interface{})
+			currItem[keyName] = data
+			items = append(items, currItem)
+		}
 	}
 
 	if look == "json" {
-		j, err := json.Marshal(settings)
+		j, err := json.Marshal(items)
 		if err != nil {
-			out.Issueln("Failed to convert settings to JSON:", err)
+			out.Issueln("Failed to convert \"globs\" items to JSON:", err)
 			return ""
 		}
-		return string(j)
+		return cast.ToString(j)
 	}
-	return pretty.Sprintf("%# v", settings)
+	// The pretty String() method formats this for pretty text output, honoring
+	// our output indent levels and such (see textindentlevel and texthumanize
+	// settings in cmds/dvln.go and cmds/globals.go)
+	prettyOut := pretty.Sprintf("%# v", items)
+	return prettyOut
 }
 
 // String implements a stringer for the UseLevel type so we can print out
