@@ -1239,10 +1239,6 @@ func (v *Viper) String() string {
 	// config "globs" type desired ("env" for env vars, "cfg" for cfgfile)
 	cfgGlobType := v.GetString(UserCfgTypeName)
 
-	//eriknow... need to re-work the text and JSON output now, see ~/dvln.txt
-	//           for how this will be done (following Google json guidelines)
-	//           and the use of a "growing" map structure in the 'out' pkg
-
 	// Only "document" those settings that have descriptions, alphabetically:
 	keys := []string{}
 	for k := range v.desc {
@@ -1250,9 +1246,8 @@ func (v *Viper) String() string {
 	}
 	sort.Strings(keys)
 
-	//eriknow: need to think about omitempty for text output, honoring it in pretty
-	//         or shifting away from pretty into JSON and then munge that output and
-	//         add in field alignment like pretty, etc
+	//FIXME erik: re-work JSON output according to ~/dvln.txt, getting close
+
 	type itemData struct {
 		Description string      `json:"description,omitempty" pretty:"Description,omitempty"`
 		UseLevel    string      `json:"useLevel,omitempty" pretty:"Use Level,omitempty"`
@@ -1260,7 +1255,6 @@ func (v *Viper) String() string {
 	}
 	items := make([]interface{}, 0, 0)
 	for _, k := range keys {
-		//eriknow... this will have to change once done with the above
 		var keyName string
 		useKey := false
 		useScope := v.useScope[k]
@@ -1276,30 +1270,45 @@ func (v *Viper) String() string {
 			continue
 		}
 		var data itemData
+		data.Value = v.Get(k)
 		if verbosity != "terse" {
 			data.Description = v.desc[k]
-			data.Value = v.Get(k)
 		}
 		if verbosity == "verbose" {
 			data.UseLevel = fmt.Sprintf("%s", v.useLevel[k])
 		}
-		// if we're in terse mode just put the names on the list
-		if data.Description == "" {
-			items = append(items, keyName)
-		} else { // otherwise load up the key/value info
-			currItem := make(map[string]interface{})
-			currItem[keyName] = data
-			items = append(items, currItem)
-		}
+		currItem := make(map[string]interface{})
+		currItem[keyName] = data
+		items = append(items, currItem)
 	}
 
 	if look == "json" {
+		// FIXME erik: migrate this into a separate package so this is one line,
+		//             also migrate out/json.go into that pkg (?)
+		// like in dvlnver.go we need to modify the marshal and such into a pkg
+		// that does the marshal and error checking and, if in JSON mode, it would
+		// put the 'error' into the overall JSON structure with some method in that
+		// new pkg to ask if there is an error and what value to exit with via an
+		// API (and the json would have that data in it so it could be printed and
+		// then we exit with -1 or whatever on error)...
+		// - consider modifying out for errors and issues and fatal errors so all
+		//   that is put into the JSON overall structure and dumped/returned
+		//   appropriately ideally... winging it a bit here til we iron this out
 		j, err := json.Marshal(items)
 		if err != nil {
+			//FIXME erik: consider errors in JSON API re-working
 			out.Issueln("Failed to convert \"globs\" items to JSON:", err)
 			return ""
 		}
-		return cast.ToString(j)
+		var str string
+		// put in indentation and formatting, can turn that off as well
+		// if desired via the "jsonraw" glob (viper) setting
+		str, err = out.PrettyJSON(j)
+		if err != nil {
+			out.Issueln("Unable to beautify JSON output:", err)
+			return ""
+		}
+		return str
 	}
 	// The pretty String() method formats this for pretty text output, honoring
 	// our output indent levels and such (see textindentlevel and texthumanize
