@@ -34,7 +34,6 @@ package viper
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -45,6 +44,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dvln/api"
 	"github.com/dvln/out"
 	"github.com/kr/pretty"
 	"github.com/mitchellh/mapstructure"
@@ -1246,8 +1246,6 @@ func (v *Viper) String() string {
 	}
 	sort.Strings(keys)
 
-	//FIXME erik: re-work JSON output according to ~/dvln.txt, getting close
-
 	type itemData struct {
 		Description string      `json:"description,omitempty" pretty:"Description,omitempty"`
 		UseLevel    string      `json:"useLevel,omitempty" pretty:"Use Level,omitempty"`
@@ -1264,57 +1262,42 @@ func (v *Viper) String() string {
 		} else if cfgGlobType == "env" && (useScope&AvailEnv) != 0 {
 			keyName = v.mergeWithEnvPrefix(k)
 			useKey = true
-
 		}
 		if !useKey {
 			continue
 		}
 		var data itemData
-		data.Value = v.Get(k)
 		if verbosity != "terse" {
 			data.Description = v.desc[k]
 		}
 		if verbosity == "verbose" {
 			data.UseLevel = fmt.Sprintf("%s", v.useLevel[k])
 		}
+		data.Value = v.Get(k)
 		currItem := make(map[string]interface{})
 		currItem[keyName] = data
 		items = append(items, currItem)
 	}
 
 	if look == "json" {
-		// FIXME erik: migrate this into a separate package so this is one line,
-		//             also migrate out/json.go into that pkg (?)
-		// like in dvlnver.go we need to modify the marshal and such into a pkg
-		// that does the marshal and error checking and, if in JSON mode, it would
-		// put the 'error' into the overall JSON structure with some method in that
-		// new pkg to ask if there is an error and what value to exit with via an
-		// API (and the json would have that data in it so it could be printed and
-		// then we exit with -1 or whatever on error)...
-		// - consider modifying out for errors and issues and fatal errors so all
-		//   that is put into the JSON overall structure and dumped/returned
-		//   appropriately ideally... winging it a bit here til we iron this out
-		j, err := json.Marshal(items)
-		if err != nil {
-			//FIXME erik: consider errors in JSON API re-working
-			out.Issueln("Failed to convert \"globs\" items to JSON:", err)
-			return ""
+		fields := make([]string, 0, 0)
+		fields = append(fields, "(name)")
+		if verbosity != "terse" {
+			fields = append(fields, "description")
 		}
-		var str string
-		// put in indentation and formatting, can turn that off as well
-		// if desired via the "jsonraw" glob (viper) setting
-		str, err = out.PrettyJSON(j)
-		if err != nil {
-			out.Issueln("Unable to beautify JSON output:", err)
-			return ""
+		if verbosity == "verbose" {
+			fields = append(fields, "useLevel")
 		}
-		return str
+		fields = append(fields, "value")
+		// This will honor output indent levels and such as already specified,
+		// see use of jsonindentlevel and such in cmds/dvln.go
+		//eriknow
+		return api.GetJSONString(v.GetString("apiver"), "dvlnGlobs", cfgGlobType, verbosity, fields, items)
 	}
 	// The pretty String() method formats this for pretty text output, honoring
 	// our output indent levels and such (see textindentlevel and texthumanize
 	// settings in cmds/dvln.go and cmds/globals.go)
-	prettyOut := pretty.Sprintf("%# v", items)
-	return prettyOut
+	return pretty.Sprintf("%# v", items)
 }
 
 // String implements a stringer for the UseLevel type so we can print out
