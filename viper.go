@@ -1291,7 +1291,6 @@ func (v *Viper) String() string {
 		fields = append(fields, "value")
 		// This will honor output indent levels and such as already specified,
 		// see use of jsonindentlevel and such in cmds/dvln.go
-		//eriknow
 		return api.GetJSONString(v.GetString("apiver"), "dvlnGlobs", cfgGlobType, verbosity, fields, items)
 	}
 	// The pretty String() method formats this for pretty text output, honoring
