@@ -114,6 +114,7 @@ const (
 	ConstGlobal      = AvailDefault
 	BasicGlobal      = AvailEnv | AvailCfgFile | AvailDefault
 	CLIGlobal        = AvailCLI | BasicGlobal
+	CLIOnlyGlobal    = AvailCLI | AvailDefault
 	VCSGlobal        = AvailVCSPkg | AvailVCSMPkg | AvailVCSCodeBasePkg | AvailVCSHookPkg | AvailVCSPluginPkg | AvailDefault
 	BasicVCSGlobal   = BasicGlobal | VCSGlobal
 	FullVCSGlobal    = CLIGlobal | VCSGlobal
