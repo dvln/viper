@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/dvln/out"
+	"github.com/kr/pretty"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 )
@@ -452,6 +453,81 @@ func TestBoundCaseSensitivity(t *testing.T) {
 	BindPFlag("eYEs", flag)
 	assert.Equal(t, "green", Get("eyes"))
 
+}
+
+func TestDescriptionData(t *testing.T) {
+	// On a key we know exists, add description info
+	SetDesc("eyes", "eye color", NoviceUser, BasicGlobal)
+	// Grab the description info for that key
+	str, useLvl, useScope := Desc("eyes")
+	// Verify the results are what we just set
+	assert.Equal(t, "eye color", str)
+	assert.Equal(t, NoviceUser, useLvl)
+	assert.Equal(t, useScope, BasicGlobal)
+
+	// Double check the useLevel String() method and it's reverse
+	useLvlStr := fmt.Sprintf("%s", useLvl)
+	assert.Equal(t, useLvlStr, "NOVICE")
+	newUseLvl := UseLevelString2UseLevel(useLvlStr)
+	assert.Equal(t, useLvl, newUseLvl)
+
+	// Try it an unknown/unset key, should return these values
+	str, useLvl, useScope = Desc("bogusEyes")
+	assert.Equal(t, "", str)
+	assert.Equal(t, useLvl, UnknownUseLevel)
+	assert.Equal(t, useScope, 0)
+}
+
+func TestViperTextPrint(t *testing.T) {
+	initConfigs()
+	// Add in some variables needed for pretty print String() method
+	Set("verbose", true)
+	Set("look", "text")
+	Set("globs", "cfg")
+
+	// Tweak the eyes setting a bit, adding full description as well
+	Set("eyes", "blue")
+	SetDesc("eyes", "eye color", NoviceUser, CLIGlobal)
+
+	// Make sure our output uses the pretty format
+	pretty.SetHumanize(true)
+	myV := GetSingleton()
+	output := fmt.Sprintf("%s", myV)
+	pretty.SetHumanize(false)
+	// See if we get what we expect
+	assert.Contains(t, output, "eyes:")
+	assert.Contains(t, output, "Description:")
+	assert.Contains(t, output, "eye color\n")
+	assert.Contains(t, output, "Use Level:")
+	assert.Contains(t, output, "NOVICE\n")
+	assert.Contains(t, output, "Value:")
+	assert.Contains(t, output, "blue\n")
+	// Verify the humanized output is coming out ok
+	assert.NotContains(t, output, "interface")
+}
+
+func TestViperJSONPrint(t *testing.T) {
+	initConfigs()
+	// Tweak config with a few expected "print" control variables:
+	Set("verbose", true)
+	Set("look", "json")
+	Set("globs", "env")
+	Set("apiver", "0.1")
+
+	// Lets see eyes to blue for grins and add a description
+	Set("eyes", "blue")
+	// Note that SetDesc does the BindEnv for you if the visibility is to
+	// the environment (ie: CLIGlobal will make it available to the env via
+	// a BindKey call within SetDesc() here for the "eyes" key)
+	SetDesc("eyes", "eye color", NoviceUser, CLIGlobal)
+	myV := GetSingleton()
+	output := fmt.Sprintf("%s", myV)
+	pretty.SetHumanize(false)
+	assert.Contains(t, output, "\"description\": \"eye color\"")
+	assert.Contains(t, output, "\"useLevel\": \"NOVICE\"")
+	assert.Contains(t, output, "\"value\": \"blue\"")
+	assert.Contains(t, output, "\"EYES\":")
+	assert.Contains(t, output, "\"apiVersion\": \"0.1\",")
 }
 
 func TestSizeInBytes(t *testing.T) {

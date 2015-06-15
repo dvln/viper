@@ -1208,6 +1208,11 @@ var LookName = "look"
 // so if "verbose" is set to 'true' (as a viper key) then verbose output is on
 var VerboseName = "verbose"
 
+// APIVersionName is needed for JSON output of the *Viper structure, if no
+// api version is set then the JSON is bogus (defaults to "apiver" as the
+// name of the key being looked for)
+var APIVersionName = "apiver"
+
 // TerseName is used to dump brief information about the viper cfg|env, so
 // if "terse" is set as a key and is true then a reduced amount of data will
 // be dumped (note that VerboseName's setting, if set, overrides this)
@@ -1228,6 +1233,7 @@ var UserCfgTypeName = "globs"
 // - LookName defaults to "look" as the key to look for "text|json"
 // - TerseName defaults to "terse" as the key, if true then terse
 // - VerboseName defaults to "verbose" as the key, if true then verbose (overrides terse)
+// - APIVersionName defaults to "apiver" and is required for JSON formatted output
 func (v *Viper) String() string {
 	verbosity := "regular"
 	if v.GetBool(VerboseName) {
@@ -1292,7 +1298,24 @@ func (v *Viper) String() string {
 		fields = append(fields, "value")
 		// This will honor output indent levels and such as already specified,
 		// see use of jsonindentlevel and such in cmds/dvln.go
-		return api.GetJSONString(v.GetString("apiver"), "dvlnGlobs", cfgGlobType, verbosity, fields, items)
+		apiVer := v.GetString(APIVersionName)
+		var output string
+		var fatalProblem bool
+		if apiVer != "" {
+			output, fatalProblem = api.GetJSONString(apiVer, "dvlnGlobs", cfgGlobType, verbosity, fields, items)
+		} else {
+			output = fmt.Sprintf("No '%s' key is set internally so unable to dump JSON\n", APIVersionName)
+			fatalProblem = true
+		}
+		if fatalProblem {
+			// FIXME: erik: need to figure out something to do here... print
+			// and die not good enough for server mode but "ok" for client mode,
+			// note that an out.Fatal(output) won't print anything during test
+			// runs (modify testViperJSONPrint() to not set apiver to see that)
+			fmt.Fprintf(os.Stderr, "%s", output)
+			out.Exit(-1)
+		}
+		return output
 	}
 	// The pretty String() method formats this for pretty text output, honoring
 	// our output indent levels and such (see textindentlevel and texthumanize
