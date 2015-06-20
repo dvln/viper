@@ -27,11 +27,11 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/BurntSushi/toml"
+	"github.com/dvln/toml"
 	"github.com/dvln/out"
-	"github.com/magiconair/properties"
-	"github.com/spf13/cast"
-	"gopkg.in/yaml.v2"
+	"github.com/dvln/properties"
+	"github.com/dvln/cast"
+	"github.com/dvln/yaml"
 )
 
 // insensitiviseMap turns the keys into lower case (case insensitive)

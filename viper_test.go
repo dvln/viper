@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/dvln/out"
-	"github.com/kr/pretty"
-	"github.com/spf13/pflag"
-	"github.com/stretchr/testify/assert"
+	"github.com/dvln/pretty"
+	"github.com/dvln/pflag"
+	"github.com/dvln/testify/assert"
 )
 
 var yamlExample = []byte(`Hacker: true

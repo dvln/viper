@@ -46,11 +46,11 @@ import (
 
 	"github.com/dvln/api"
 	"github.com/dvln/out"
-	"github.com/kr/pretty"
-	"github.com/mitchellh/mapstructure"
-	"github.com/spf13/cast"
-	"github.com/spf13/pflag"
-	crypt "github.com/xordataexchange/crypt/config"
+	"github.com/dvln/pretty"
+	"github.com/dvln/mapstructure"
+	"github.com/dvln/cast"
+	"github.com/dvln/pflag"
+	crypt "github.com/dvln/crypt/config"
 )
 
 // UseLevel is a type that indicates the level of user should be "at" to use a
