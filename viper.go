@@ -45,12 +45,12 @@ import (
 	"time"
 
 	"github.com/dvln/api"
-	"github.com/dvln/out"
-	"github.com/dvln/pretty"
-	"github.com/dvln/mapstructure"
 	"github.com/dvln/cast"
-	"github.com/dvln/pflag"
 	crypt "github.com/dvln/crypt/config"
+	"github.com/dvln/mapstructure"
+	"github.com/dvln/out"
+	"github.com/dvln/pflag"
+	"github.com/dvln/pretty"
 )
 
 // UseLevel is a type that indicates the level of user should be "at" to use a
@@ -673,6 +673,27 @@ func (v *Viper) BindPFlags(flags *pflag.FlagSet) (err error) {
 	return
 }
 
+// ClearPFlag is a bit of a hack, used to be replace but was having issues so
+// now it's a simple mechanism to clear viper's knowledge of a command line
+// flag so that an override can override a command line setting (the way viper
+// works is that if pflags has a flag set and a Set() has been called it'll
+// actually prefer the pflag setting, not the override setting).  If you want
+// it to prefer the Set() override setting you can use this, typically only
+// used if one is using SetPflags() above.
+func ClearPFlag(key string) { v.ClearPFlag(key) }
+
+// ClearPFlag is same as like named singleton (but drives off given *Viper)
+func (v *Viper) ClearPFlag(key string) {
+	if key == "" {
+		return
+	}
+	key = strings.ToLower(key)
+	_, exists := v.pflags[key]
+	if exists {
+		delete(v.pflags, key)
+	}
+}
+
 // BindPFlag binds a specific key to a flag (as used by cobra)
 // Example(where serverCmd is a Cobra instance):
 //
@@ -741,7 +762,7 @@ func (v *Viper) find(key string) interface{} {
 	if exists {
 		if flag.Changed {
 			val, exists = v.override[key]
-			out.Tracef("'%s' found in override (via pflag): %v\n", key, val)
+			out.Tracef("'%s' found in override (via pflag): %v (%s)\n", key, val, flag.Value.String())
 			return flag.Value.String()
 		}
 	}
