@@ -1323,7 +1323,7 @@ func (v *Viper) String() string {
 		var output string
 		var fatalProblem bool
 		if apiVer != "" {
-			output, fatalProblem = api.GetJSONString(apiVer, "dvlnGlobs", cfgGlobType, verbosity, fields, items)
+			output, fatalProblem = api.GetJSONOutput(apiVer, "dvlnGlobs", cfgGlobType, verbosity, fields, items)
 		} else {
 			output = fmt.Sprintf("No '%s' key is set internally so unable to dump JSON\n", APIVersionName)
 			fatalProblem = true
