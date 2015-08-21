@@ -348,9 +348,9 @@ func AddConfigPath(in string) { v.AddConfigPath(in) }
 // AddConfigPath is same as like named singleton (but drives off given *Viper)
 func (v *Viper) AddConfigPath(in string) {
 	if in != "" {
-		absin := AbsPathify(in)
+		absin := absPathify(in)
 		out.Traceln("adding", absin, "to paths to search")
-		if !StringInSlice(absin, v.configPaths) {
+		if !stringInSlice(absin, v.configPaths) {
 			v.configPaths = append(v.configPaths, absin)
 		}
 	}
@@ -370,7 +370,7 @@ func AddRemoteProvider(provider, endpoint, path string) error {
 
 // AddRemoteProvider same as like named singleton (but drives off given *Viper)
 func (v *Viper) AddRemoteProvider(provider, endpoint, path string) error {
-	if !StringInSlice(provider, SupportedRemoteProviders) {
+	if !stringInSlice(provider, SupportedRemoteProviders) {
 		return UnsupportedRemoteProviderError(provider)
 	}
 	if provider != "" && endpoint != "" {
@@ -404,7 +404,7 @@ func AddSecureRemoteProvider(provider, endpoint, path, secretkeyring string) err
 // AddSecureRemoteProvider is same as like named singleton (but drives off
 // given *Viper)
 func (v *Viper) AddSecureRemoteProvider(provider, endpoint, path, secretkeyring string) error {
-	if !StringInSlice(provider, SupportedRemoteProviders) {
+	if !stringInSlice(provider, SupportedRemoteProviders) {
 		return UnsupportedRemoteProviderError(provider)
 	}
 	if provider != "" && endpoint != "" {
@@ -970,7 +970,7 @@ func ReadInConfig() error { return v.ReadInConfig() }
 // ReadInConfig is same as like named singleton (but drives off given *Viper)
 func (v *Viper) ReadInConfig() error {
 	out.Traceln("Attempting to read in config file:")
-	if !StringInSlice(v.getConfigType(), SupportedExts) {
+	if !stringInSlice(v.getConfigType(), SupportedExts) {
 		return UnsupportedConfigError(v.getConfigType())
 	}
 
@@ -1007,7 +1007,7 @@ func (v *Viper) ReadRemoteConfig() error {
 // marshalReader marshalls an io.Reader into a map
 func marshalReader(in io.Reader, c map[string]interface{}, desc string) { v.marshalReader(in, c, desc) }
 func (v *Viper) marshalReader(in io.Reader, c map[string]interface{}, desc string) {
-	marshallConfigReader(in, c, v.getConfigType(), desc)
+	MarshallConfigReader(in, c, v.getConfigType(), desc)
 }
 
 func (v *Viper) insensitiviseMaps() {
@@ -1167,7 +1167,7 @@ func (v *Viper) searchInPath(in string) (filename string) {
 		// We know the check works, already know what we're scanning for and
 		// since we print out any config file we do find (below), skip this
 		// out.Traceln("Checking for", filepath.Join(in, v.configName+"."+ext))
-		if b, _ := Exists(filepath.Join(in, v.configName+"."+ext)); b {
+		if b, _ := exists(filepath.Join(in, v.configName+"."+ext)); b {
 			out.Traceln("Found:", filepath.Join(in, v.configName+"."+ext))
 			return filepath.Join(in, v.configName+"."+ext)
 		}

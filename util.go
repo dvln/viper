@@ -49,13 +49,11 @@ func insensitiviseMap(m map[string]interface{}) {
 	}
 }
 
-// AbsPathify takes a path and attempts to clean it up and turn
+// absPathify takes a path and attempts to clean it up and turn
 // it into an absolute path via filepath.Clean and filepath.Abs
-func AbsPathify(inPath string) string {
-	//out.Traceln("Trying to resolve absolute path to", inPath)
-
+func absPathify(inPath string) string {
 	if strings.HasPrefix(inPath, "$HOME") {
-		inPath = UserHomeDir() + inPath[5:]
+		inPath = userHomeDir() + inPath[5:]
 	}
 
 	if strings.HasPrefix(inPath, "$") {
@@ -64,7 +62,7 @@ func AbsPathify(inPath string) string {
 	}
 
 	if strings.HasPrefix(inPath, "~") {
-		inPath = UserHomeDir() + inPath[1:]
+		inPath = userHomeDir() + inPath[1:]
 	}
 
 	if filepath.IsAbs(inPath) {
@@ -80,8 +78,8 @@ func AbsPathify(inPath string) string {
 	return ""
 }
 
-// Exists checks if given file/dir exists
-func Exists(path string) (bool, error) {
+// exists checks if given file/dir exists
+func exists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
 		return true, nil
@@ -92,8 +90,8 @@ func Exists(path string) (bool, error) {
 	return false, err
 }
 
-// StringInSlice is checking exactly that, is the string in the slice
-func StringInSlice(a string, list []string) bool {
+// stringInSlice is checking exactly that, is the string in the slice
+func stringInSlice(a string, list []string) bool {
 	for _, b := range list {
 		if b == a {
 			return true
@@ -102,8 +100,8 @@ func StringInSlice(a string, list []string) bool {
 	return false
 }
 
-// UserHomeDir figures out the users home dir
-func UserHomeDir() string {
+// userHomeDir figures out the users home dir
+func userHomeDir() string {
 	if runtime.GOOS == "windows" {
 		home := os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
 		if home == "" {
@@ -114,8 +112,8 @@ func UserHomeDir() string {
 	return os.Getenv("HOME")
 }
 
-// FindCWD tries to find the current working directory
-func FindCWD() (string, error) {
+// findCWD tries to find the current working directory
+func findCWD() (string, error) {
 	serverFile, err := filepath.Abs(os.Args[0])
 
 	if err != nil {
@@ -138,13 +136,13 @@ func FindCWD() (string, error) {
 	return path, nil
 }
 
-// marshallConfigReader reads from the given io.Reader and unmarshals
+// MarshallConfigReader reads from the given io.Reader and unmarshals
 // the results into the given map 'c' (adding to it potentially) for
 // the given config type (yaml/yml, json, toml) with case insensitive
 // keys (lower case basically) along with a description of what it
 // is we're trying to marshall so errors make some sense as this can
 // fatal error if problem marshalling.
-func marshallConfigReader(in io.Reader, c map[string]interface{}, configType string, desc string) {
+func MarshallConfigReader(in io.Reader, c map[string]interface{}, configType string, desc string) {
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(in)
 
