@@ -112,6 +112,7 @@ const (
 	// Below we have common combinations of the above
 
 	ConstGlobal      = AvailDefault
+	InternalGlobal   = AvailDefault
 	BasicGlobal      = AvailEnv | AvailCfgFile | AvailDefault
 	CLIGlobal        = AvailCLI | BasicGlobal
 	CLIOnlyGlobal    = AvailCLI | AvailDefault
