@@ -32,9 +32,20 @@ import (
 	"github.com/dvln/properties"
 	"github.com/dvln/cast"
 	"github.com/dvln/yaml"
+	"github.com/dvln/hcl"
 )
 
-// insensitiviseMap turns the keys into lower case (case insensitive)
+
+// Denotes failing to parse configuration file.
+type ConfigParseError struct {
+	err error
+}
+
+// Returns the formatted configuration error.
+func (pe ConfigParseError) Error() string {
+	return fmt.Sprintf("While parsing config: %s", pe.err.Error())
+}
+
 func insensitiviseMap(m map[string]interface{}) {
 	for key, val := range m {
 		lower := strings.ToLower(key)
@@ -136,37 +147,40 @@ func findCWD() (string, error) {
 	return path, nil
 }
 
-// MarshallConfigReader reads from the given io.Reader and unmarshals
-// the results into the given map 'c' (adding to it potentially) for
-// the given config type (yaml/yml, json, toml) with case insensitive
-// keys (lower case basically) along with a description of what it
-// is we're trying to marshall so errors make some sense as this can
-// fatal error if problem marshalling.
-func MarshallConfigReader(in io.Reader, c map[string]interface{}, configType string, desc string) {
+func unmarshallConfigReader(in io.Reader, c map[string]interface{}, configType string) error {
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(in)
 
-	switch configType {
+	switch strings.ToLower(configType) {
 	case "yaml", "yml":
 		if err := yaml.Unmarshal(buf.Bytes(), &c); err != nil {
-			out.Fatalf("Error parsing %s:\n- Problem: %s", desc, err)
+			return ConfigParseError{err}
 		}
 
 	case "json":
 		if err := json.Unmarshal(buf.Bytes(), &c); err != nil {
-			out.Fatalf("Error parsing %s:\n- Problem: %s", desc, err)
+			return ConfigParseError{err}
+		}
+
+	case "hcl":
+		obj, err := hcl.Parse(string(buf.Bytes()))
+		if err != nil {
+			return ConfigParseError{err}
+		}
+		if err = hcl.DecodeObject(&c, obj); err != nil {
+			return ConfigParseError{err}
 		}
 
 	case "toml":
 		if _, err := toml.Decode(buf.String(), &c); err != nil {
-			out.Fatalf("Error parsing %s:\n- Problem: %s", desc, err)
+			return ConfigParseError{err}
 		}
 
 	case "properties", "props", "prop":
 		var p *properties.Properties
 		var err error
 		if p, err = properties.Load(buf.Bytes(), properties.UTF8); err != nil {
-			out.Fatalf("Error parsing %s:\n- Problem: %s", desc, err)
+			return ConfigParseError{err}
 		}
 		for _, key := range p.Keys() {
 			value, _ := p.Get(key)
@@ -176,6 +190,7 @@ func MarshallConfigReader(in io.Reader, c map[string]interface{}, configType str
 
 	// make all keys lower case (case insensitive)
 	insensitiviseMap(c)
+	return nil
 }
 
 func safeMul(a, b uint) uint {
