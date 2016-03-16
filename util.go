@@ -27,14 +27,13 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/dvln/toml"
+	"github.com/dvln/cast"
+	"github.com/dvln/hcl"
 	"github.com/dvln/out"
 	"github.com/dvln/properties"
-	"github.com/dvln/cast"
+	"github.com/dvln/toml"
 	"github.com/dvln/yaml"
-	"github.com/dvln/hcl"
 )
-
 
 // Denotes failing to parse configuration file.
 type ConfigParseError struct {

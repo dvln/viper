@@ -47,11 +47,11 @@ import (
 
 	"github.com/dvln/api"
 	"github.com/dvln/cast"
+	"github.com/dvln/fsnotify"
 	"github.com/dvln/mapstructure"
 	"github.com/dvln/out"
 	"github.com/dvln/pflag"
 	"github.com/dvln/pretty"
-	"github.com/dvln/fsnotify"
 )
 
 // UseLevel is a type that indicates the level of user should be "at" to use a
@@ -796,7 +796,7 @@ func (v *Viper) SetPFlags(flags *pflag.FlagSet) (err error) {
 		if flag.Name != "" && flags.Lookup(flag.Name).Changed {
 			flagName := strings.ToLower(flag.Name)
 			// Then shove it in as a *used* pflags option
-			
+
 			var flagVal pflagValue
 			flagVal.flag = flag
 			v.pflags[flagName] = flagVal
@@ -955,13 +955,6 @@ func (v *Viper) find(key string) interface{} {
 
 	// PFlag Override first
 	flag, exists := v.pflags[key]
-
-    //eriknow, former entry
-	//if exists {
-	//	if flag.Changed {
-	//		val, exists = v.override[key]
-	//		out.Tracef("'%s' found in override (via pflag): %v (%s)\n", key, val, flag.Value.String())
-	//		return flag.Value.String()
 
 	if exists && flag.HasChanged() {
 		out.Traceln(key, "found in override (via pflag):", flag.ValueString())

@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/dvln/out"
-	"github.com/dvln/pretty"
 	"github.com/dvln/pflag"
+	"github.com/dvln/pretty"
 	"github.com/dvln/testify/assert"
 )
 
