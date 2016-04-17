@@ -36,7 +36,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -45,6 +44,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dvln/afero"
 	"github.com/dvln/api"
 	"github.com/dvln/cast"
 	"github.com/dvln/fsnotify"
@@ -53,6 +53,35 @@ import (
 	"github.com/dvln/pflag"
 	"github.com/dvln/pretty"
 )
+
+// support the afero filesystem abstraction for config files
+var (
+	filesys afero.Fs
+)
+
+// SetFilesys will set the filesystem wrapper up to write to the real
+// filesystem or a virtual filesystem if preferred (see afero).  If the
+// filesys that is passed in is 'nil' it causes it to "bootstrap" the OS
+// filesystem if none has yet been set, if one is set it ignores nil calls.
+func SetFilesys(fs afero.Fs) {
+	// if we're in a set if not set mode then use the os filesystem
+	if fs == nil && filesys == nil {
+		fs = afero.NewOsFs()
+	}
+	if fs == nil {
+		return
+	}
+	filesys = fs
+}
+
+// Filesys returns current filesystem used for message writing, can
+// be nil if it hasn't been set yet
+func Filesys() afero.Fs {
+	if filesys == nil {
+		filesys = afero.NewOsFs()
+	}
+	return filesys
+}
 
 // UseLevel is a type that indicates the level of user should be "at" to use a
 // given config key (variable)... meaning they likely don't want to be setting
@@ -144,6 +173,8 @@ func init() {
 	// see a way other than this to insure DVLN is set for all viper users for
 	// the singleton viper.
 	v.SetEnvPrefix("DVLN")
+	// If not already set this will set up the standard OS filesystem for use
+	SetFilesys(nil)
 }
 
 type remoteConfigFactory interface {
@@ -334,6 +365,9 @@ func (v *Viper) OnConfigChange(run func(in fsnotify.Event)) {
 	v.onConfigChange = run
 }
 
+// WatchConfig monitors your config file for changes, if any seen then it is
+// re-read.  Note that this capability uses fsnotify and is not compatible with
+// the afero filesystem mechanism at this point (so beware).
 func WatchConfig() { v.WatchConfig() }
 func (v *Viper) WatchConfig() {
 	go func() {
@@ -435,8 +469,20 @@ func (v *Viper) AddConfigPath(in string) {
 		out.Traceln("adding", absin, "to paths to search")
 		if !stringInSlice(absin, v.configPaths) {
 			v.configPaths = append(v.configPaths, absin)
+			out.Tracef("updated config paths: %+v\n", v.configPaths)
 		}
 	}
+}
+
+// ClearConfigSettings clears out any previously added config file paths
+// and names from previous runs (if run under, say, a test hardness) and
+// allows the next run to cleanly re-determine what config file to read in
+func ClearConfigSettings() { v.ClearConfigSettings() }
+
+// ClearConfigSettings is same as like named singleton (but drives off given *Viper)
+func (v *Viper) ClearConfigSettings() {
+	v.configPaths = []string{}
+	v.configFile = ""
 }
 
 // AddRemoteProvider adds a remote configuration source.
@@ -1202,7 +1248,7 @@ func (v *Viper) ReadInConfig() error {
 		return UnsupportedConfigError(v.getConfigType())
 	}
 
-	file, err := ioutil.ReadFile(v.getConfigFile())
+	file, err := afero.ReadFile(filesys, v.getConfigFile())
 	if err != nil {
 		return err
 	}
@@ -1220,7 +1266,7 @@ func (v *Viper) MergeInConfig() error {
 		return UnsupportedConfigError(v.getConfigType())
 	}
 
-	file, err := ioutil.ReadFile(v.getConfigFile())
+	file, err := afero.ReadFile(filesys, v.getConfigFile())
 	if err != nil {
 		return err
 	}
@@ -1519,25 +1565,28 @@ func (v *Viper) getConfigType() string {
 func (v *Viper) getConfigFile() string {
 	// if explicitly set, then use it
 	if v.configFile != "" {
+		out.Traceln("config file check: config file set, returning:", v.configFile)
 		return v.configFile
 	}
 
 	cf, err := v.findConfigFile()
 	if err != nil {
+		out.Traceln("config file check: getConfigFile() returning nothing")
 		return ""
 	}
 
+	out.Traceln("config file check: Setting config file to:", cf)
 	v.configFile = cf
 	return v.getConfigFile()
 }
 
 func (v *Viper) searchInPath(in string) (filename string) {
 	// The full search path is dumped via Trace output already, skip it here
-	// out.Traceln("Searching for config in", in)
+	out.Traceln("config file check: Searching for config in ", v.configPaths)
 	for _, ext := range SupportedExts {
 		// We know the check works, already know what we're scanning for and
 		// since we print out any config file we do find (below), skip this
-		// out.Traceln("Checking for", filepath.Join(in, v.configName+"."+ext))
+		out.Traceln("config file check: Checking for", filepath.Join(in, v.configName+"."+ext))
 		if b, _ := exists(filepath.Join(in, v.configName+"."+ext)); b {
 			out.Traceln("Found:", filepath.Join(in, v.configName+"."+ext))
 			return filepath.Join(in, v.configName+"."+ext)

@@ -775,7 +775,6 @@ func TestReadBufConfig(t *testing.T) {
 	v := New()
 	v.SetConfigType("yaml")
 	v.ReadConfig(bytes.NewBuffer(yamlExample))
-	t.Log(v.AllKeys())
 
 	assert.True(t, v.InConfig("name"))
 	assert.False(t, v.InConfig("state"))

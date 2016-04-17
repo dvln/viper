@@ -90,7 +90,7 @@ func absPathify(inPath string) string {
 
 // exists checks if given file/dir exists
 func exists(path string) (bool, error) {
-	_, err := os.Stat(path)
+	_, err := filesys.Stat(path)
 	if err == nil {
 		return true, nil
 	}
@@ -134,7 +134,7 @@ func findCWD() (string, error) {
 	realFile, err := filepath.EvalSymlinks(serverFile)
 
 	if err != nil {
-		if _, err = os.Stat(serverFile + ".exe"); err == nil {
+		if _, err = filesys.Stat(serverFile + ".exe"); err == nil {
 			realFile = filepath.Clean(serverFile + ".exe")
 		}
 	}
